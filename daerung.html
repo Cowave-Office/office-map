@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>사무실 자리배치도 (관리자 모드 지원)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Noto Sans KR', 'sans-serif'] },
+                    colors: {
+                        themeBlue: '#4F81BD'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --print-scale: 0.6;
+        }
+
+        .fa-solid {
+            color: #4F81BD !important;
+        }
+
+        .map-canvas-bg {
+            background-color: #e5e2d8;
+            background-image: radial-gradient(#cbc6b7 1.5px, transparent 1.5px);
+            background-size: 24px 24px;
+        }
+
+        .grab-mode { cursor: grab; }
+        .grabbing-mode { cursor: grabbing !important; }
+
+        .excel-table-layout {
+            border-collapse: collapse; 
+            table-layout: fixed;
+            margin: 0 auto;
+        }
+
+        .excel-table-layout td {
+            height: 26px; 
+            padding: 0;
+            margin: 0;
+            font-size: 10px;
+            font-weight: 700;
+            text-align: center;
+            vertical-align: middle;
+            color: #33302a;
+            white-space: pre-wrap; 
+            word-break: keep-all; 
+            line-height: 1.15;
+            user-select: none;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .seat-td {
+            transition: all 0.15s ease-in-out;
+        }
+
+        .seat-td:hover {
+            transform: translateY(-2px) scale(1.12);
+            box-shadow: 0 8px 18px rgba(0,0,0,0.18);
+            z-index: 50;
+            position: relative;
+            outline: 2.5px solid #4F81BD !important;
+            border-color: transparent !important;
+        }
+
+        @keyframes pulse-glow {
+            0% { transform: scale(1); outline: 0px solid rgba(79, 129, 189, 0.7); }
+            50% { transform: scale(1.18); outline: 6px solid rgba(79, 129, 189, 0); }
+            100% { transform: scale(1); outline: 0px solid rgba(79, 129, 189, 0); }
+        }
+        .highlight-seat {
+            animation: pulse-glow 1.2s infinite;
+            z-index: 40 !important;
+            border: 2px solid #4F81BD !important;
+            background-color: #4F81BD !important;
+            color: #ffffff !important;
+            font-weight: 900 !important;
+        }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #e5e2d8; }
+        ::-webkit-scrollbar-thumb { background: #c5c0b2; }
+        ::-webkit-scrollbar-thumb:hover { background: #a39e90; }
+
+        @media print {
+            @page { size: A4 landscape; margin: 10mm; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            header, .bg-stone-800.shadow-md { display: none !important; }
+            body, html, main#viewport { height: auto !important; overflow: visible !important; background: white !important; position: static !important; padding: 0 !important; }
+            #floorplanContainer { transform: scale(var(--print-scale)) !important; transform-origin: top left !important; box-shadow: none !important; border: none !important; margin: 0 !important; padding: 0 !important; }
+        }
+    </style>
+</head>
+<body class="bg-stone-100 text-stone-800 h-screen flex flex-col overflow-hidden font-sans antialiased">
+
+    <header class="bg-stone-900 text-white px-6 py-3.5 flex flex-wrap items-center justify-between shadow-md z-30 shrink-0 border-b border-stone-800">
+        <div class="flex items-center gap-3.5">
+            <div id="adminLoginBtn" class="p-2.5 bg-stone-800 text-stone-200 rounded-xl shadow-inner border border-stone-700 cursor-pointer hover:bg-stone-700 transition" title="관리자 모드">
+                <i class="fa-solid fa-building text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-extrabold tracking-tight flex items-center gap-2.5 text-stone-100">
+                    대륭포스트타워6차 17층
+                </h1>
+                <p class="text-xs text-stone-400">서울 금천구 벚꽃로 298</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3 my-1">
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-sm"></i>
+                <input type="text" id="searchInput" placeholder="이름, 팀, 회의실 검색..." class="pl-9 pr-8 py-2 bg-stone-800 border border-stone-700 text-stone-200 rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-[#4F81BD] focus:bg-stone-900 transition-all shadow-inner">
+                <button id="clearSearchBtn" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-200">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <div class="flex items-center bg-stone-800 rounded-lg p-1 border border-stone-700 shadow-inner">
+                <button id="zoomOutBtn" title="축소" class="p-1.5 text-stone-300 hover:bg-stone-700 rounded transition"><i class="fa-solid fa-minus text-xs"></i></button>
+                <span id="zoomVal" class="px-2 text-xs font-semibold text-stone-300 min-w-[45px] text-center">100%</span>
+                <button id="zoomInBtn" title="확대" class="p-1.5 text-stone-300 hover:bg-stone-700 rounded transition"><i class="fa-solid fa-plus text-xs"></i></button>
+                <button id="zoomResetBtn" title="초기화" class="p-1.5 text-stone-300 hover:bg-stone-700 rounded transition ml-1"><i class="fa-solid fa-rotate-right text-xs"></i></button>
+            </div>
+
+            <div id="adminControls" class="hidden flex items-center gap-2">
+                <button id="changePwBtn" class="px-3 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs font-bold rounded-lg transition shadow-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-key"></i> 비밀번호 변경
+                </button>
+                <label for="excelInput" class="px-3.5 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs font-bold rounded-lg transition shadow-xs flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-file-import"></i> 엑셀 업로드
+                </label>
+                <input type="file" id="excelInput" accept=".xlsx, .xls, .csv" class="hidden" />
+            </div>
+
+            <div class="flex items-center gap-1.5 bg-stone-800 border border-stone-700 px-2.5 py-1.5 rounded-lg shadow-inner mr-1">
+                <label for="printScaleInput" class="text-xs text-stone-300 font-bold cursor-pointer" title="용지에 맞게 인쇄 크기를 조절하세요."><i class="fa-solid fa-down-left-and-up-right-to-center"></i> 인쇄 비율</label>
+                <div class="flex items-center bg-stone-900 border border-stone-600 rounded px-1.5 py-0.5 focus-within:ring-1 focus-within:ring-[#4F81BD]">
+                    <input type="number" id="printScaleInput" value="60" min="10" max="150" step="5" class="bg-transparent text-stone-200 text-xs w-9 text-right focus:outline-none font-bold">
+                    <span class="text-stone-400 text-xs ml-0.5 font-bold">%</span>
+                </div>
+            </div>
+
+            <button id="downloadExcelBtn" class="px-3.5 py-2 bg-[#4F81BD] hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition shadow-xs flex items-center gap-1.5">
+                <i class="fa-solid fa-file-excel !text-white"></i> 엑셀 저장
+            </button>
+
+            <button onclick="window.print()" class="px-3 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs font-bold rounded-lg transition shadow-xs flex items-center gap-1.5 border-[#4F81BD] shadow-[0_0_8px_rgba(79,129,189,0.3)]">
+                <i class="fa-solid fa-print"></i> 인쇄
+            </button>
+        </div>
+    </header>
+
+    <div class="bg-stone-800 shadow-md z-20 relative flex flex-col">
+        <div class="text-stone-300 text-xs py-2.5 px-6 flex flex-wrap items-center gap-5 border-b border-stone-700">
+            <button id="toggleDirBtn" class="px-3.5 py-1.5 bg-stone-700 hover:bg-stone-600 text-stone-100 rounded text-xs font-bold transition flex items-center gap-1.5 shadow-sm border border-stone-600">
+                <i class="fa-solid fa-list"></i> 전체 리스트
+            </button>
+        </div>
+
+        <div id="dirPanel" class="hidden bg-stone-100 border-b border-stone-300 shadow-inner w-full overflow-y-auto" style="max-height: 350px;">
+            <div id="dirContent" class="grid grid-cols-1 md:grid-cols-3 gap-8 p-6 max-w-7xl mx-auto w-full">
+            </div>
+        </div>
+    </div>
+
+    <main class="flex-1 overflow-auto p-10 map-canvas-bg relative grab-mode" id="viewport">
+        <div id="floorplanContainer" class="bg-stone-50 border border-stone-300 shadow-2xl p-10 rounded-3xl relative transition-transform duration-150 origin-top-left flex flex-col gap-4 mx-auto w-max" style="min-width: 1650px;">
+            <div class="flex items-center justify-between pb-4 border-b border-stone-300">
+                <div class="flex items-center gap-3 text-stone-800 font-black text-sm tracking-wide">
+                    <span class="w-3.5 h-3.5 bg-[#4F81BD] rounded-full inline-block"></span>
+                    17층
+                </div>
+                <div class="text-xs text-stone-500 font-medium">* 빈 배경을 마우스로 드래그하면 지도를 이동할 수 있습니다.</div>
+            </div>
+
+            <div id="canvasWrapper" class="overflow-auto max-w-full relative">
+                <div id="dynamicFloorplan"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        window.searchFromDirectory = function(val) {
+            const searchInput = document.getElementById('searchInput');
+            searchInput.value = val;
+            searchInput.dispatchEvent(new Event('input'));
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            let zoomLevel = 1.0;
+            let activeItemsData = [];
+
+            const viewport = document.getElementById('viewport');
+            const floorplan = document.getElementById('floorplanContainer');
+            const dynamicFloorplan = document.getElementById('dynamicFloorplan');
+            
+            const searchInput = document.getElementById('searchInput');
+            const clearSearchBtn = document.getElementById('clearSearchBtn');
+            const excelInput = document.getElementById('excelInput');
+            const downloadExcelBtn = document.getElementById('downloadExcelBtn');
+            const toggleDirBtn = document.getElementById('toggleDirBtn');
+            const dirPanel = document.getElementById('dirPanel');
+            
+            const adminLoginBtn = document.getElementById('adminLoginBtn');
+            const adminControls = document.getElementById('adminControls');
+            const changePwBtn = document.getElementById('changePwBtn');
+            
+            const printScaleInput = document.getElementById('printScaleInput');
+
+            printScaleInput.addEventListener('input', (e) => {
+                let val = parseInt(e.target.value, 10);
+                if (isNaN(val)) return; 
+                val = Math.max(10, Math.min(200, val));
+                document.documentElement.style.setProperty('--print-scale', (val / 100).toString());
+            });
+
+            printScaleInput.addEventListener('blur', (e) => {
+                let val = parseInt(e.target.value, 10);
+                if (isNaN(val)) {
+                    e.target.value = 60;
+                    document.documentElement.style.setProperty('--print-scale', '0.6');
+                } else {
+                    e.target.value = Math.max(10, Math.min(200, val));
+                }
+            });
+
+            // 17F 전용 비밀번호 Key 사용
+            if (!localStorage.getItem('adminPassword_17F')) {
+                localStorage.setItem('adminPassword_17F', '0000');
+            }
+
+            adminLoginBtn.addEventListener('click', () => {
+                if (!adminControls.classList.contains('hidden')) {
+                    adminControls.classList.add('hidden');
+                    return;
+                }
+                const currentPw = localStorage.getItem('adminPassword_17F');
+                const inputPw = prompt('비밀번호를 입력하세요.');
+                if (inputPw === currentPw) adminControls.classList.remove('hidden');
+                else if (inputPw !== null) alert('비밀번호가 일치하지 않습니다.');
+            });
+
+            changePwBtn.addEventListener('click', () => {
+                const currentPw = localStorage.getItem('adminPassword_17F');
+                const inputPw = prompt('현재 비밀번호를 입력하세요.');
+                if (inputPw === currentPw) {
+                    const newPw = prompt('새로운 비밀번호를 입력하세요.');
+                    if (newPw) {
+                        localStorage.setItem('adminPassword_17F', newPw);
+                        alert('비밀번호가 성공적으로 변경되었습니다.');
+                    }
+                } else if (inputPw !== null) {
+                    alert('현재 비밀번호가 일치하지 않습니다.');
+                }
+            });
+
+            toggleDirBtn.addEventListener('click', function() {
+                dirPanel.classList.toggle('hidden');
+                const icon = this.querySelector('i');
+                if (dirPanel.classList.contains('hidden')) {
+                    icon.className = 'fa-solid fa-list';
+                    this.className = 'px-3.5 py-1.5 bg-stone-700 hover:bg-stone-600 text-stone-100 rounded text-xs font-bold transition flex items-center gap-1.5 shadow-sm border border-stone-600';
+                } else {
+                    icon.className = 'fa-solid fa-chevron-up';
+                    this.className = 'px-3.5 py-1.5 bg-white hover:bg-stone-50 text-[#4F81BD] rounded text-xs font-bold transition flex items-center gap-1.5 shadow-sm border border-stone-300';
+                }
+            });
+
+            let isDragging = false;
+            let startX, startY, scrollLeft, scrollTop;
+
+            viewport.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                isDragging = true;
+                viewport.classList.add('grabbing-mode');
+                startX = e.pageX - viewport.offsetLeft;
+                startY = e.pageY - viewport.offsetTop;
+                scrollLeft = viewport.scrollLeft;
+                scrollTop = viewport.scrollTop;
+            });
+            viewport.addEventListener('mouseleave', () => { isDragging = false; viewport.classList.remove('grabbing-mode'); });
+            viewport.addEventListener('mouseup', () => { isDragging = false; viewport.classList.remove('grabbing-mode'); });
+            viewport.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                e.preventDefault();
+                const x = e.pageX - viewport.offsetLeft;
+                const y = e.pageY - viewport.offsetTop;
+                const walkX = (x - startX) * 1.5;
+                const walkY = (y - startY) * 1.5;
+                viewport.scrollLeft = scrollLeft - walkX;
+                viewport.scrollTop = scrollTop - walkY;
+            });
+
+            function updateDirectory(items) {
+                const teams = new Set();
+                const rooms = new Set();
+                const names = new Set();
+
+                items.forEach(it => {
+                    if (!it.v) return;
+                    const val = it.v.trim();
+                    if (val === '' || val.includes('출입문') || val === '(예비 공석)' || val.includes('외부인력') || val.includes('망분리 PC') || val.includes('택배PC') || val.includes('우편') || val.includes('공용창고') || val.includes('STORAGE')) return;
+
+                    const vUp = val.toUpperCase();
+                    const isRoom = val.includes('화장실') || val.includes('회의실') || vUp.includes('CONFERENCE') || vUp.includes('A80') || vUp.includes('A1201') || vUp.includes('B80') || vUp.includes('B1201') || val.includes('임원실') || vUp.includes('CEO') || val.includes('라운지') || vUp.includes('LOUNGE') || vUp.includes('서버실') || vUp.includes('SERVER') || vUp.includes('TEST') || val.includes('ROOM') || vUp.includes('OA') || val.includes('탕비') || val.includes('메일룸');
+                    const isTitle = (val.includes('팀') || val.includes('본부') || val.includes('파트') || val.includes('사업') || vUp.includes('WORK STATION') || val.includes('구역') || val.includes('존') || vUp.includes('ZONE')) && !val.includes('전산파트');
+
+                    const cleanVal = val.replace(/\n/g, ' ').trim();
+
+                    if (isTitle) {
+                        teams.add(cleanVal);
+                    } else if (isRoom) {
+                        rooms.add(cleanVal);
+                    } else {
+                        names.add(cleanVal);
+                    }
+                });
+
+                const buildSection = (title, icon, set) => {
+                    if (set.size === 0) return '';
+                    const arr = Array.from(set).sort();
+                    let html = `<div class="mb-4"><h3 class="text-sm font-extrabold text-stone-700 mb-3 flex items-center gap-1.5 border-b border-stone-300 pb-2"><i class="${icon}"></i> ${title} <span class="text-xs text-stone-400 font-normal ml-1">${arr.length}</span></h3><div class="flex flex-wrap gap-2">`;
+                    arr.forEach(item => {
+                        html += `<button onclick="searchFromDirectory('${item}')" class="px-2.5 py-1.5 bg-white border border-stone-300 hover:border-[#4F81BD] hover:text-[#4F81BD] hover:bg-blue-50 rounded-md text-xs font-bold text-stone-600 transition shadow-sm">${item}</button>`;
+                    });
+                    html += `</div></div>`;
+                    return html;
+                };
+
+                document.getElementById('dirContent').innerHTML = 
+                    buildSection('부서 및 팀', 'fa-solid fa-users-viewfinder', teams) +
+                    buildSection('임직원', 'fa-solid fa-user-tag', names) +
+                    buildSection('회의실 및 시설', 'fa-solid fa-door-closed', rooms);
+            }
+
+            function renderDatasetToTable(items) {
+                activeItemsData = items;
+                dynamicFloorplan.innerHTML = '';
+                if (!items || items.length === 0) return;
+
+                updateDirectory(items);
+
+                let minR = 1, maxR = 75, minC = 1, maxC = 100;
+                items.forEach(it => {
+                    if (it.r + it.rs - 1 > maxR) maxR = it.r + it.rs - 1;
+                    if (it.c + it.cs - 1 > maxC) maxC = it.c + it.cs - 1;
+                });
+
+                const cellMap = {};
+                const covered = new Set();
+
+                items.forEach(it => {
+                    cellMap[`${it.r},${it.c}`] = it;
+                    if (it.rs > 1 || it.cs > 1) {
+                        for (let r = it.r; r < it.r + it.rs; r++) {
+                            for (let c = it.c; c < it.c + it.cs; c++) {
+                                if (!(r === it.r && c === it.c)) {
+                                    covered.add(`${r},${c}`);
+                                }
+                            }
+                        }
+                    }
+                });
+
+                const tableContainer = document.createElement('div');
+                tableContainer.style.position = 'relative';
+
+                const table = document.createElement('table');
+                table.className = 'excel-table-layout';
+                table.style.width = ((maxC - minC + 1) * 32) + 'px';
+
+                const colgroup = document.createElement('colgroup');
+                for (let c = minC; c <= maxC; c++) {
+                    const col = document.createElement('col');
+                    col.style.width = '32px'; col.style.minWidth = '32px'; col.style.maxWidth = '32px';
+                    colgroup.appendChild(col);
+                }
+                table.appendChild(colgroup);
+
+                for (let r = minR; r <= maxR; r++) {
+                    const tr = document.createElement('tr');
+                    tr.style.height = '26px'; 
+
+                    for (let c = minC; c <= maxC; c++) {
+                        if (covered.has(`${r},${c}`)) continue;
+
+                        const item = cellMap[`${r},${c}`];
+                        const td = document.createElement('td');
+
+                        if (item) {
+                            if (item.rs > 1) td.rowSpan = item.rs;
+                            if (item.cs > 1) td.colSpan = item.cs;
+
+                            const valTrimmed = (item.v || '').trim();
+                            const vUp = valTrimmed.toUpperCase();
+
+                            const wrapperDiv = document.createElement('div');
+                            wrapperDiv.style.width = '100%';
+                            wrapperDiv.style.height = '100%';
+                            wrapperDiv.style.display = 'flex';
+                            wrapperDiv.style.alignItems = 'center';
+                            wrapperDiv.style.justifyContent = 'center';
+                            wrapperDiv.style.flexDirection = 'column';
+
+                            // "팀명은 가로 한줄" 예외 처리 필터
+                            const isTeamTitle = valTrimmed.includes('팀') || valTrimmed.includes('본부') || valTrimmed.includes('실') || vUp.includes('ZONE') || valTrimmed.includes('파트') || valTrimmed.includes('라운지');
+
+                            // 1. 부서, 팀명 등 공간 이름 -> 강제로 가로 한 줄에 표시
+                            if (isTeamTitle) {
+                                wrapperDiv.style.whiteSpace = 'nowrap';
+                                wrapperDiv.innerHTML = `<span>${valTrimmed.replace(/\n/g, ' ')}</span>`;
+                            } 
+                            // 2. 인원 등 이름 -> 이름은 세로, 영어(소속알파벳)는 가로에
+                            else {
+                                // 엑셀에서 명시적으로 세로 회전값이 있거나, 수직 형태의 병합셀일 경우
+                                const isVertical = (item.align && (item.align.textRotation === '255' || item.align.textRotation === '90')) || (item.rs > item.cs && valTrimmed.length >= 2 && !valTrimmed.includes('출입문') && !vUp.includes('PC'));
+                                
+                                if (isVertical && valTrimmed.length > 0) {
+                                    // 줄바꿈 기준으로 이름과 알파벳(A, B, C 등)을 분리
+                                    const parts = valTrimmed.split('\n');
+                                    let htmlContent = '';
+                                    
+                                    if (parts.length > 0) {
+                                        // 첫번째 줄 (이름) -> 세로 쓰기 적용
+                                        htmlContent += `<div style="writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 1px;">${parts[0]}</div>`;
+                                    }
+                                    if (parts.length > 1) {
+                                        // 두번째 줄 (알파벳 등) -> 가로 유지 및 하단 마진 추가
+                                        htmlContent += `<div style="margin-top: 4px; font-weight: 900; font-size: 0.95em;">${parts.slice(1).join(' ')}</div>`;
+                                    }
+                                    wrapperDiv.innerHTML = htmlContent;
+                                } else {
+                                    // 수평일 경우 그대로 줄바꿈 유지
+                                    wrapperDiv.innerHTML = valTrimmed.replace(/\n/g, '<br>');
+                                }
+                            }
+                            
+                            td.appendChild(wrapperDiv);
+                            
+                            // 이름이 있으면 좌석 이펙트(hover) 부여
+                            if (valTrimmed !== '' && !isTeamTitle && !valTrimmed.includes('화장실') && !valTrimmed.includes('서버룸')) {
+                                td.classList.add('seat-td');
+                            }
+                            
+                            // 배경색
+                            td.style.backgroundColor = item.bg || 'transparent';
+                            td.style.border = 'none';
+
+                            // 테두리 복원 
+                            let currentBorder = item.border || {};
+
+                            if (Object.keys(currentBorder).length > 0) {
+                                ['top', 'bottom', 'left', 'right'].forEach(side => {
+                                    if (currentBorder[side]) {
+                                        const b = currentBorder[side];
+                                        let cssStyle = 'solid';
+                                        if (b.style.toLowerCase().includes('dash')) cssStyle = 'dashed';
+                                        if (b.style.toLowerCase().includes('dot')) cssStyle = 'dotted';
+                                        if (b.style.toLowerCase() === 'none') cssStyle = 'none';
+                                        
+                                        let cssColor = '#000000';
+                                        if (b.color) cssColor = '#' + (b.color.length === 8 ? b.color.substring(2) : b.color);
+                                        
+                                        let cssWidth = '1px'; 
+                                        if (b.style.toLowerCase() === 'medium') cssWidth = '2px';
+                                        if (b.style.toLowerCase() === 'thick') cssWidth = '3px';
+                                        if (b.style.toLowerCase() === 'double') { cssStyle = 'double'; cssWidth = '3px'; }
+                                        
+                                        if (cssStyle !== 'none') {
+                                            td.style.setProperty(`border-${side}`, `${cssWidth} ${cssStyle} ${cssColor}`, 'important');
+                                        }
+                                    }
+                                });
+                            }
+
+                            td.style.wordBreak = 'break-all';
+                            td.style.color = '#33302a';
+
+                            // 폰트 색상 대비 보정
+                            if (item.bg && item.bg !== 'transparent') {
+                                const hex = item.bg.replace('#', '');
+                                if (hex.length === 6) {
+                                    const rv = parseInt(hex.substr(0, 2), 16);
+                                    const gv = parseInt(hex.substr(2, 2), 16);
+                                    const bv = parseInt(hex.substr(4, 2), 16);
+                                    const yiq = ((rv * 299) + (gv * 587) + (bv * 114)) / 1000;
+                                    if (yiq < 128) {
+                                        td.style.color = '#ffffff';
+                                    }
+                                }
+                            }
+                        }
+                        tr.appendChild(td);
+                    }
+                    table.appendChild(tr);
+                }
+
+                tableContainer.appendChild(table);
+                dynamicFloorplan.appendChild(tableContainer);
+                filterSeats();
+            }
+
+            // 엑셀의 테마 색상에서 파생되는 밝기(Tint) 값을 계산하여 완벽하게 동일한 HEX 코드를 추출
+            function applyTint(hex, tint) {
+                if (!hex) return hex;
+                hex = hex.replace('#', '');
+                if (hex.length === 8) hex = hex.substring(2); // ARGB -> RGB 변환
+                let r = parseInt(hex.substring(0, 2), 16);
+                let g = parseInt(hex.substring(2, 4), 16);
+                let b = parseInt(hex.substring(4, 6), 16);
+
+                if (tint > 0) {
+                    r = Math.round(r * (1 - tint) + (255 * tint));
+                    g = Math.round(g * (1 - tint) + (255 * tint));
+                    b = Math.round(b * (1 - tint) + (255 * tint));
+                } else if (tint < 0) {
+                    r = Math.round(r * (1 + tint));
+                    g = Math.round(g * (1 + tint));
+                    b = Math.round(b * (1 + tint));
+                }
+                const toHex = (n) => {
+                    const h = Math.max(0, Math.min(255, n)).toString(16);
+                    return h.length === 1 ? '0' + h : h;
+                };
+                return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+            }
+
+            async function parseXlsxDirectXML(fileArrayBuffer) {
+                const zip = await JSZip.loadAsync(fileArrayBuffer);
+                
+                const stylesXmlText = await zip.file('xl/styles.xml').async('string');
+                const parser = new DOMParser();
+                const stylesDoc = parser.parseFromString(stylesXmlText, 'text/xml');
+
+                // Office 기본 표준 테마 팔레트 인덱스
+                const themeColors = {
+                    0: "#FFFFFF", 1: "#000000", 2: "#E7E6E6", 3: "#44546A",
+                    4: "#5B9BD5", 5: "#ED7D31", 6: "#A5A5A5", 7: "#FFC000",
+                    8: "#4472C4", 9: "#70AD47", 10: "#FFFF00", 11: "#FF0000"
+                };
+
+                const fills = [];
+                stylesDoc.querySelectorAll('fills > fill').forEach(f => {
+                    const fg = f.querySelector('fgColor');
+                    if (fg) {
+                        const rgb = fg.getAttribute('rgb');
+                        const theme = fg.getAttribute('theme');
+                        const tint = parseFloat(fg.getAttribute('tint') || '0');
+                        
+                        let baseColor = "";
+                        if (rgb) {
+                            baseColor = "#" + (rgb.length === 8 ? rgb.substring(2) : rgb);
+                        } else if (theme !== null) {
+                            baseColor = themeColors[theme] || "#E2E8F0";
+                        }
+                        
+                        // Tint 밝기 계산 적용!
+                        if (baseColor && tint !== 0) {
+                            baseColor = applyTint(baseColor, tint);
+                        }
+                        fills.push(baseColor);
+                    } else fills.push("");
+                });
+
+                const borders = [];
+                stylesDoc.querySelectorAll('borders > border').forEach(b => {
+                    const borderObj = {};
+                    ['top', 'bottom', 'left', 'right'].forEach(side => {
+                        const sideNode = b.querySelector(side);
+                        if (sideNode && sideNode.getAttribute('style')) {
+                            const colorNode = sideNode.querySelector('color');
+                            let color = "FF000000";
+                            if (colorNode) {
+                                const rgb = colorNode.getAttribute('rgb');
+                                const theme = colorNode.getAttribute('theme');
+                                const tint = parseFloat(colorNode.getAttribute('tint') || '0');
+                                
+                                if (rgb) color = rgb;
+                                else if (theme !== null) {
+                                    let baseC = themeColors[theme] || "#000000";
+                                    if (tint !== 0) baseC = applyTint(baseC, tint);
+                                    color = "FF" + baseC.replace('#', '');
+                                }
+                            }
+                            borderObj[side] = { style: sideNode.getAttribute('style'), color: color };
+                        }
+                    });
+                    borders.push(borderObj);
+                });
+
+                const xfFills = [];
+                const xfBorders = [];
+                const xfAligns = [];
+                stylesDoc.querySelectorAll('cellXfs > xf').forEach(xf => {
+                    const fillId = parseInt(xf.getAttribute('fillId') || '0', 10);
+                    const borderId = parseInt(xf.getAttribute('borderId') || '0', 10);
+                    xfFills.push(fills[fillId] || "");
+                    xfBorders.push(borders[borderId] || {});
+                    
+                    const aNode = xf.querySelector('alignment');
+                    if (aNode) {
+                        xfAligns.push({
+                            wrapText: aNode.getAttribute('wrapText'),
+                            textRotation: aNode.getAttribute('textRotation')
+                        });
+                    } else {
+                        xfAligns.push({});
+                    }
+                });
+
+                const sheetXmlText = await zip.file('xl/worksheets/sheet1.xml').async('string');
+                const sheetDoc = parser.parseFromString(sheetXmlText, 'text/xml');
+
+                let sharedStrings = [];
+                const ssFile = zip.file('xl/sharedStrings.xml');
+                if (ssFile) {
+                    const ssXmlText = await ssFile.async('string');
+                    const ssDoc = parser.parseFromString(ssXmlText, 'text/xml');
+                    ssDoc.querySelectorAll('si').forEach(si => sharedStrings.push(si.textContent.trim()));
+                }
+
+                const mergeMap = {};
+                sheetDoc.querySelectorAll('mergeCells > mergeCell').forEach(m => {
+                    const ref = m.getAttribute('ref');
+                    const parts = ref.split(':');
+                    const start = XLSX.utils.decode_cell(parts[0]);
+                    const end = XLSX.utils.decode_cell(parts[1]);
+
+                    mergeMap[`${start.r + 1},${start.c + 1}`] = {
+                        rs: end.r - start.r + 1,
+                        cs: end.c - start.c + 1,
+                        endR: end.r + 1,
+                        endC: end.c + 1
+                    };
+                });
+
+                const rawCells = {};
+                sheetDoc.querySelectorAll('sheetData > row > c').forEach(c => {
+                    const cellAddr = c.getAttribute('r');
+                    const decoded = XLSX.utils.decode_cell(cellAddr);
+                    const row = decoded.r + 1;
+                    const col = decoded.c + 1;
+
+                    const styleIdx = parseInt(c.getAttribute('s') || '0', 10);
+                    const bg = xfFills[styleIdx] || "";
+                    const border = xfBorders[styleIdx] || {};
+                    const align = xfAligns[styleIdx] || {};
+
+                    const type = c.getAttribute('t');
+                    const vNode = c.querySelector('v');
+                    let val = "";
+
+                    if (vNode) {
+                        if (type === 's') val = sharedStrings[parseInt(vNode.textContent, 10)] || "";
+                        else val = vNode.textContent;
+                    } else {
+                        const isNode = c.querySelector('is > t');
+                        if (isNode) val = isNode.textContent;
+                    }
+
+                    rawCells[`${row},${col}`] = {
+                        r: row, c: col, v: val, bg: bg, border: border, align: align
+                    };
+                });
+
+                const parsedItems = [];
+                Object.keys(rawCells).forEach(key => {
+                    const cell = rawCells[key];
+                    const span = mergeMap[`${cell.r},${cell.c}`] || { rs: 1, cs: 1 };
+                    
+                    let mergedBorder = JSON.parse(JSON.stringify(cell.border));
+
+                    if (span.rs > 1 || span.cs > 1) {
+                        const endR = cell.r + span.rs - 1;
+                        const endC = cell.c + span.cs - 1;
+                        
+                        const bottomCell = rawCells[`${endR},${cell.c}`];
+                        if (bottomCell && bottomCell.border && bottomCell.border.bottom) {
+                            mergedBorder.bottom = bottomCell.border.bottom;
+                        }
+                        const rightCell = rawCells[`${cell.r},${endC}`];
+                        if (rightCell && rightCell.border && rightCell.border.right) {
+                            mergedBorder.right = rightCell.border.right;
+                        }
+                        const cornerCell = rawCells[`${endR},${endC}`];
+                        if (cornerCell && cornerCell.border) {
+                            if (cornerCell.border.bottom) mergedBorder.bottom = cornerCell.border.bottom;
+                            if (cornerCell.border.right) mergedBorder.right = cornerCell.border.right;
+                        }
+                    }
+
+                    if (cell.v || cell.bg || span.rs > 1 || span.cs > 1 || Object.keys(mergedBorder).length > 0) {
+                        parsedItems.push({
+                            r: cell.r, c: cell.c, v: cell.v, bg: cell.bg, rs: span.rs, cs: span.cs, border: mergedBorder, align: cell.align, isExcel: true
+                        });
+                    }
+                });
+
+                return parsedItems;
+            }
+
+            excelInput.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const parsedItems = await parseXlsxDirectXML(arrayBuffer);
+                    if (parsedItems && parsedItems.length > 0) {
+                        localStorage.setItem('savedFloorplanData_daerung', JSON.stringify(parsedItems));
+                        renderDatasetToTable(parsedItems);
+                    } else {
+                        alert("엑셀 도면 데이터를 읽어오지 못했습니다.");
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('엑셀 분석 중 오류가 발생했습니다.');
+                }
+            });
+
+            downloadExcelBtn.addEventListener('click', () => {
+                const wb = XLSX.utils.book_new();
+                const ws = {};
+                const merges = [];
+
+                let maxR = 75, maxC = 100;
+                activeItemsData.forEach(item => {
+                    if (item.r + item.rs > maxR) maxR = item.r + item.rs;
+                    if (item.c + item.cs > maxC) maxC = item.c + item.cs;
+                });
+
+                activeItemsData.forEach(item => {
+                    const r = item.r - 1;
+                    const c = item.c - 1;
+                    if (item.rs > 1 || item.cs > 1) {
+                        merges.push({ s: { r: r, c: c }, e: { r: r + item.rs - 1, c: c + item.cs - 1 } });
+                    }
+                });
+
+                activeItemsData.forEach(item => {
+                    const startR = item.r - 1;
+                    const startC = item.c - 1;
+                    const endR = startR + item.rs - 1;
+                    const endC = startC + item.cs - 1;
+
+                    for (let currR = startR; currR <= endR; currR++) {
+                        for (let currC = startC; currC <= endC; currC++) {
+                            const cellRef = XLSX.utils.encode_cell({r: currR, c: currC});
+                            
+                            let cellStyle = {
+                                font: { name: "맑은 고딕", sz: 10, bold: true, color: { rgb: "33302A" } },
+                                alignment: { vertical: "center", horizontal: "center", wrapText: true }
+                            };
+
+                            let textValue = "";
+                            if (currR === startR && currC === startC) {
+                                textValue = item.v || "";
+                                if (item.align && (item.align.textRotation === '255' || item.align.textRotation === '90')) {
+                                    cellStyle.alignment.textRotation = 255;
+                                }
+                            }
+
+                            if (item.bg && item.bg.trim() !== "") {
+                                cellStyle.fill = { fgColor: { rgb: item.bg.replace("#", "") } };
+                                const hex = item.bg.replace('#', '');
+                                if (hex.length === 6) {
+                                    const rv = parseInt(hex.substr(0, 2), 16);
+                                    const gv = parseInt(hex.substr(2, 2), 16);
+                                    const bv = parseInt(hex.substr(4, 2), 16);
+                                    if (((rv * 299) + (gv * 587) + (bv * 114)) / 1000 < 128) {
+                                        cellStyle.font.color = { rgb: "FFFFFF" };
+                                    }
+                                }
+                            }
+
+                            if (item.border && Object.keys(item.border).length > 0) {
+                                cellStyle.border = {};
+                                if (currR === startR && item.border.top) {
+                                    cellStyle.border.top = { style: item.border.top.style, color: { rgb: item.border.top.color.replace(/^FF/, '').replace(/^#/, '') || "000000" } };
+                                }
+                                if (currR === endR && item.border.bottom) {
+                                    cellStyle.border.bottom = { style: item.border.bottom.style, color: { rgb: item.border.bottom.color.replace(/^FF/, '').replace(/^#/, '') || "000000" } };
+                                }
+                                if (currC === startC && item.border.left) {
+                                    cellStyle.border.left = { style: item.border.left.style, color: { rgb: item.border.left.color.replace(/^FF/, '').replace(/^#/, '') || "000000" } };
+                                }
+                                if (currC === endC && item.border.right) {
+                                    cellStyle.border.right = { style: item.border.right.style, color: { rgb: item.border.right.color.replace(/^FF/, '').replace(/^#/, '') || "000000" } };
+                                }
+                            }
+
+                            if (!ws[cellRef]) ws[cellRef] = { v: textValue, t: "s", s: cellStyle };
+                            else {
+                                ws[cellRef].v = textValue;
+                                ws[cellRef].s = cellStyle;
+                            }
+                        }
+                    }
+                });
+
+                ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: maxR - 1, c: maxC - 1 } });
+                ws['!merges'] = merges;
+                ws['!cols'] = Array(maxC).fill({ wpx: 32 }); 
+                ws['!rows'] = Array(maxR).fill({ hpx: 26 }); 
+
+                XLSX.utils.book_append_sheet(wb, ws, "가산DK 17층_자리배치도.xlsx");
+                XLSX.writeFile(wb, "가산DK 17층_자리배치도.xlsx");
+            });
+
+            function setZoom(val) {
+                zoomLevel = Math.max(0.3, Math.min(2.0, val));
+                floorplan.style.transform = `scale(${zoomLevel})`;
+                document.getElementById('zoomVal').innerText = `${Math.round(zoomLevel * 100)}%`;
+            }
+
+            document.getElementById('zoomInBtn').addEventListener('click', () => setZoom(zoomLevel + 0.1));
+            document.getElementById('zoomOutBtn').addEventListener('click', () => setZoom(zoomLevel - 0.1));
+            document.getElementById('zoomResetBtn').addEventListener('click', () => setZoom(1.0));
+
+            viewport.addEventListener('wheel', (e) => {
+                if (e.ctrlKey) {
+                    e.preventDefault();
+                    setZoom(zoomLevel + (e.deltaY < 0 ? 0.08 : -0.08));
+                }
+            }, { passive: false });
+
+            function filterSeats() {
+                const query = searchInput.value.replace(/\s+/g, '').toLowerCase();
+                clearSearchBtn.classList.toggle('hidden', searchInput.value.trim().length === 0);
+
+                const tds = document.querySelectorAll('.excel-table-layout td');
+                let firstMatch = null;
+
+                tds.forEach(td => {
+                    const text = td.innerText.replace(/\s+/g, '').toLowerCase();
+                    if (query && text && text.includes(query)) {
+                        td.classList.add('highlight-seat');
+                        if (!firstMatch) firstMatch = td; 
+                    } else {
+                        td.classList.remove('highlight-seat');
+                    }
+                });
+
+                if (firstMatch && query.length > 0) {
+                    const viewportRect = viewport.getBoundingClientRect();
+                    const elementRect = firstMatch.getBoundingClientRect();
+                    
+                    const currentScrollTop = viewport.scrollTop;
+                    const currentScrollLeft = viewport.scrollLeft;
+
+                    const targetTop = currentScrollTop + (elementRect.top - viewportRect.top) - (viewportRect.height / 2) + (elementRect.height / 2);
+                    const targetLeft = currentScrollLeft + (elementRect.left - viewportRect.left) - (viewportRect.width / 2) + (elementRect.width / 2);
+
+                    viewport.scrollTo({
+                        top: targetTop,
+                        left: targetLeft,
+                        behavior: 'smooth'
+                    });
+                }
+            }
+
+            searchInput.addEventListener('input', filterSeats);
+            clearSearchBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                filterSeats();
+            });
+
+             // GitHub 서버에 있는 엑셀 파일을 자동으로 불러오는 함수
+            async function loadSharedExcel() {
+                try {
+                    // 주의: 엑셀 파일 이름이 'dk17_2.xlsx'라면 아래 이름을 맞춰주세요.
+                    const response = await fetch('daerung.xlsx');
+                    
+                    if (response.ok) {
+                        const arrayBuffer = await response.arrayBuffer();
+                        const parsedItems = await parseXlsxDirectXML(arrayBuffer);
+                        if (parsedItems && parsedItems.length > 0) {
+                            renderDatasetToTable(parsedItems);
+                            console.log("서버 엑셀 데이터 로딩 성공!");
+                            return; 
+                        }
+                    } else {
+                        console.error('엑셀 파일을 찾을 수 없습니다.');
+                    }
+                } catch (err) {
+                    console.warn('엑셀 자동 로드 실패. 로컬 데이터로 대체합니다.', err);
+                }
+                
+                // 엑셀 로드에 실패했을 때만 기존 로컬 스토리지 작동 (관리자 모드용)
+                const savedData = localStorage.getItem('savedFloorplanData_daerung');
+                if (savedData) {
+                    try {
+                        renderDatasetToTable(JSON.parse(savedData));
+                        console.log("로컬 스토리지 데이터 로딩 완료");
+                    } catch (e) {
+                        console.error("저장된 데이터를 불러오는 중 오류 발생", e);
+                    }
+                }
+            }
+            
+            loadSharedExcel(); // 함수 실행
+        });
+    </script>
+</body>
+</html>
