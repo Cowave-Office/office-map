@@ -1,0 +1,60 @@
+html, body { width: 100%; height: 100%; margin: 0; }
+body { height: 100dvh; min-height: 0; touch-action: auto; }
+header { gap: 10px; padding: 12px 20px !important; }
+header > div:first-child { min-width: 0; }
+header h1 { font-size: 17px !important; letter-spacing: 0 !important; }
+header nav { flex-wrap: nowrap !important; max-width: 100%; }
+header nav button { flex-shrink: 0; }
+header > div:last-child:has(#adminControls.hidden) { display: none; }
+#secondaryToolbar { flex-shrink: 0; }
+#secondaryToolbar > div:first-child { gap: 10px; padding: 10px 20px; }
+#fullscreenBtn { width: 38px; height: 38px; border: 1px solid #d6d3d1; border-radius: 8px; background: white; flex-shrink: 0; }
+#viewport { min-height: 0; padding: 0 !important; overflow: hidden !important; touch-action: none; isolation: isolate; }
+#floorplanContainer { position: absolute; left: 0; top: 0; margin: 0 !important; padding: 16px !important; border-radius: 8px !important; transform-origin: 0 0; transition: none !important; flex: none; }
+#canvasWrapper { overflow: visible !important; max-width: none !important; }
+.excel-table-layout { border-collapse: separate; border-spacing: 0; }
+.excel-table-layout td { border: 0 !important; }
+.seat-td, .seat-td:hover, .highlight-seat, .active-match { transform: none !important; transition: background-color 120ms !important; animation: none !important; }
+.seat-td:hover { outline: 2px solid #4f81bd !important; box-shadow: none !important; }
+.highlight-seat { outline: 2px solid #4f81bd !important; outline-offset: -2px; }
+.active-match { outline-offset: -3px; box-shadow: none !important; }
+.map-borders { position: absolute; inset: 0; overflow: visible; pointer-events: none; z-index: 100; }
+.map-borders line { stroke-width: calc(var(--line-width) * var(--border-compensation, 1)); }
+#dirPanel { position: absolute; top: 100%; left: 0; max-height: min(350px, 55dvh) !important; overscroll-behavior: contain; }
+#searchPopup { position: absolute; z-index: 40; background: #fff; color: #242424; border: 1px solid #cbd2da; border-radius: 8px; box-shadow: 0 8px 24px #0000001f; overflow: hidden; }
+#searchPopup[hidden] { display: none !important; }
+#searchSummary { padding: 9px 12px; font-size: 12px; line-height: 18px; color: #606974; background: #f5f6f8; border-bottom: 1px solid #e6e8eb; }
+#searchResults { position: relative; max-height: calc(var(--search-height, 360px) - 37px); overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
+#searchResults .search-option { display: block; width: 100%; min-height: 64px; padding: 11px 14px; background: #fff; color: #242424; text-align: left; border: 0; border-bottom: 1px solid #edf0f2; border-radius: 0; cursor: pointer; }
+#searchResults .search-option:last-child { border-bottom: 0; }
+#searchResults .search-option:hover, #searchResults .search-option[aria-selected="true"] { background: #edf4fc; box-shadow: inset 3px 0 #4f81bd; }
+.search-person { display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 12px; line-height: 21px; }
+.search-person strong { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.search-team { font-size: 13px; color: #3d566b; overflow-wrap: anywhere; }
+.search-location { display: block; margin-top: 3px; font-size: 12px; line-height: 18px; color: #6e7278; overflow-wrap: anywhere; }
+button:focus-visible, [tabindex]:focus-visible { outline: 2px solid #0071e3; outline-offset: 2px; }
+@media (max-width: 800px) {
+  header { padding: 10px 12px !important; }
+  header h1 { font-size: 14px !important; }
+  header p { display: none !important; }
+  .header-subtitle { display: none; }
+  header nav { width: 100%; }
+  #secondaryToolbar > div:first-child { padding: 8px 12px; gap: 8px; }
+  #secondaryToolbar input { font-size: 16px; }
+  #secondaryToolbar > div:first-child > .relative { min-width: 170px; max-width: none; }
+  #downloadExcelBtn { padding: 0 !important; width: 38px; font-size: 0; gap: 0; justify-content: center; }
+  #downloadExcelBtn i { font-size: 14px; }
+  #secondaryToolbar div:has(> #fontIncreaseBtn) { padding-inline: 4px; gap: 0; }
+  #secondaryToolbar div:has(> #fontIncreaseBtn) > span,
+  #secondaryToolbar div:has(> #fontIncreaseBtn) > div { display: none; }
+  #secondaryToolbar div:has(> #fontIncreaseBtn) > button { width: 30px; padding: 0; }
+  #dirContent { padding: 16px; gap: 16px; }
+  #secondaryToolbar button { min-height: 38px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+@media print {
+  #searchPopup { display: none !important; }
+  #viewport { overflow: visible !important; }
+  #floorplanContainer { position: static; }
+  .map-borders line { stroke-width: var(--line-width); }
+}
