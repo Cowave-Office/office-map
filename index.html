@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>커넥트웨이브통합 공간배치도 (좌석 및 시설 안내)</title>
+    <meta name="robots" content="noindex, nofollow">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+
+    <script>
+        // ReferenceError 방지를 위한 안전한 초기화 (CDN 로드 지연 시 대비)
+        window.tailwind = window.tailwind || {};
+        window.tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Noto Sans KR', 'sans-serif'] },
+                    colors: { themeBlue: '#4F81BD' }
+                }
+            }
+        };
+    </script>
+
+    <style>
+        :root { 
+            --print-scale: 0.6; 
+            --seat-font-size: 10px; /* 글자 크기 변수화 */
+        }
+        
+        body { -webkit-font-smoothing: antialiased; touch-action: none; /* 모바일 브라우저 기본 제스처 방지 */ }
+        .fa-solid { color: #4F81BD !important; }
+        
+        .header-icon { color: #4F81BD !important; }
+        .text-stone-400 .fa-solid { color: #a8a29e !important; }
+        .text-stone-500.fa-solid { color: #78716c !important; }
+        .text-white .fa-solid, .fa-print, .fa-key, .fa-file-import, .fa-file-excel { color: inherit !important; }
+
+        .map-canvas-bg {
+            background-color: #e5e2d8;
+            background-image: radial-gradient(#cbc6b7 1.5px, transparent 1.5px);
+            background-size: 24px 24px;
+        }
+
+        .grab-mode { cursor: grab; }
+        .grabbing-mode { cursor: grabbing !important; }
+
+        .excel-table-layout {
+            border-collapse: collapse; 
+            table-layout: fixed;
+            margin: 0 auto;
+        }
+
+        .excel-table-layout td {
+            height: 26px; padding: 0; margin: 0; 
+            font-size: var(--seat-font-size); 
+            font-weight: 700; text-align: center; vertical-align: middle; 
+            color: #33302a; white-space: pre-wrap; word-break: keep-all; 
+            line-height: 1.15; user-select: none; box-sizing: border-box; position: relative;
+        }
+
+        .seat-td { transition: all 0.15s ease-in-out; }
+        .seat-td:hover {
+            transform: translateY(-2px) scale(1.12);
+            box-shadow: 0 8px 18px rgba(0,0,0,0.18);
+            z-index: 50; position: relative;
+            outline: 2.5px solid #4F81BD !important;
+            border-color: transparent !important;
+        }
+
+        @keyframes pulse-glow {
+            0% { transform: scale(1); outline: 0px solid rgba(79, 129, 189, 0.7); }
+            50% { transform: scale(1.18); outline: 6px solid rgba(79, 129, 189, 0); }
+            100% { transform: scale(1); outline: 0px solid rgba(79, 129, 189, 0); }
+        }
+        
+        /* 일반 검색 결과 하이라이트 */
+        .highlight-seat {
+            animation: pulse-glow 1.2s infinite; z-index: 40 !important;
+            border: 2px solid #4F81BD !important; background-color: #4F81BD !important;
+            color: #ffffff !important; font-weight: 900 !important;
+        }
+        
+        /* 엔터키로 포커스된 현재 타겟 좌석 하이라이트 (주황색) */
+        .active-match {
+            outline: 3px solid #f59e0b !important;
+            background-color: #f59e0b !important;
+            color: #ffffff !important;
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.6);
+            z-index: 60 !important;
+            transform: translateY(-2px) scale(1.15);
+            animation: none !important;
+        }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #e5e2d8; }
+        ::-webkit-scrollbar-thumb { background: #c5c0b2; }
+        ::-webkit-scrollbar-thumb:hover { background: #a39e90; }
+
+        @media print {
+            @page { size: A4 landscape; margin: 10mm; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            header, #secondaryToolbar { display: none !important; }
+            body, html, main#viewport { height: auto !important; overflow: visible !important; background: white !important; position: static !important; padding: 0 !important; }
+            #floorplanContainer { transform: scale(var(--print-scale)) !important; transform-origin: top left !important; box-shadow: none !important; border: none !important; margin: 0 !important; padding: 0 !important; }
+        }
+    </style>
+<link rel="stylesheet" href="map.css">
+</head>
+<body data-office="daerung" data-design="original" class="bg-stone-100 text-stone-800 h-screen flex flex-col overflow-hidden font-sans antialiased">
+
+    <header class="bg-white border-b border-stone-200 px-6 py-3 flex flex-wrap items-center justify-between shadow-sm z-30 shrink-0">
+        
+        <div class="flex items-center gap-3.5 mb-2 md:mb-0">
+            <div id="adminLoginBtn" class="p-1.5 bg-white rounded-xl shadow-sm border border-stone-200 cursor-pointer hover:bg-stone-50 transition flex items-center justify-center" title="관리자 모드">
+                <img src="image_60fd0b.png" alt="관리자 로고" class="w-7 h-7 object-contain rounded-full">
+            </div>
+            <div>
+                <h1 class="text-xl font-extrabold tracking-tight flex items-center gap-2.5 text-stone-800">
+                    커넥트웨이브 통합 공간배치도<span class="header-subtitle">(좌석 및 시설 안내)</span>
+                </h1>
+               
+            </div>
+        </div>
+
+        <nav class="flex flex-wrap items-center gap-1.5 bg-stone-100 p-1.5 rounded-xl border border-stone-200 shadow-inner w-full md:w-auto overflow-x-auto">
+            <button class="tab-btn bg-[#4F81BD] text-white font-bold shadow-md px-3.5 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap" data-tab="daerung">
+                대륭(HQ, CC CTO, CISO)
+            </button>
+            <button class="tab-btn text-stone-500 hover:text-stone-700 hover:bg-stone-200 font-medium px-3.5 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap" data-tab="woorim">
+                우림(메이크샵, 몰테일)
+            </button>
+            <button class="tab-btn text-stone-500 hover:text-stone-700 hover:bg-stone-200 font-medium px-3.5 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap" data-tab="dk18">
+                가산DK 18F(CC사업부)
+            </button>
+            <button class="tab-btn text-stone-500 hover:text-stone-700 hover:bg-stone-200 font-medium px-3.5 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap" data-tab="dk17">
+                가산DK 17F(CC사업부)
+            </button>
+            <button class="tab-btn text-stone-500 hover:text-stone-700 hover:bg-stone-200 font-medium px-3.5 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap" data-tab="gplus">
+                지플러스(플레이오토)
+            </button>
+        </nav>
+
+        <div class="flex items-center gap-2 mt-2 md:mt-0">
+            <!-- 기본적으로 숨겨져 있으며, 관리자 로그인 시 나타납니다. -->
+            <div id="adminControls" class="hidden flex items-center gap-2">
+                <div class="flex items-center gap-1.5 bg-white border border-stone-300 px-2.5 py-1.5 rounded-lg shadow-sm">
+                    <label for="printScaleInput" class="text-xs text-stone-600 font-bold cursor-pointer"><i class="fa-solid fa-down-left-and-up-right-to-center header-icon"></i> 인쇄 비율</label>
+                    <div class="flex items-center bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5">
+                        <input type="number" id="printScaleInput" value="60" min="10" max="150" step="5" class="bg-transparent text-stone-800 text-xs w-9 text-right focus:outline-none font-bold">
+                        <span class="text-stone-500 text-xs ml-0.5 font-bold">%</span>
+                    </div>
+                </div>
+
+                <button onclick="window.print()" class="px-3.5 py-1.5 bg-white hover:bg-stone-50 text-stone-700 border border-[#4F81BD] text-xs font-bold rounded-lg transition shadow-sm flex items-center gap-1.5">
+                    <i class="fa-solid fa-print !text-[#4F81BD]"></i> 인쇄
+                </button>
+
+                <div class="w-px h-5 bg-stone-300 mx-1 hidden sm:block"></div>
+
+                <button id="changePwBtn" class="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold rounded-lg transition shadow-sm flex items-center gap-1.5">
+                    <i class="fa-solid fa-key !text-stone-300"></i> PW 변경
+                </button>
+                <label for="excelInput" class="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold rounded-lg transition shadow-sm flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-file-import !text-stone-300"></i> 업로드
+                </label>
+                <input type="file" id="excelInput" accept=".xlsx, .xls, .csv" class="hidden" />
+            </div>
+        </div>
+    </header>
+
+    <div id="secondaryToolbar" class="bg-stone-50 shadow-sm z-20 relative flex flex-col border-b border-stone-200">
+        <div class="py-2.5 px-4 md:px-6 flex flex-wrap items-center gap-3 md:gap-4">
+            
+            <button id="toggleDirBtn" aria-expanded="false" aria-controls="dirPanel" class="h-[38px] px-4 bg-white hover:bg-stone-100 text-[#4F81BD] border border-[#4F81BD] rounded-lg text-sm font-bold transition flex items-center gap-2 shadow-sm whitespace-nowrap">
+                <i class="fa-solid fa-list"></i> 전체 리스트
+            </button>
+            
+            <div class="w-px h-6 bg-stone-300 hidden md:block"></div>
+            
+            <!-- 전 지점 통합 검색창 -->
+            <div id="searchBox" class="relative flex-1 min-w-[200px] max-w-md h-[38px]">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 text-sm"></i>
+                <input type="text" id="searchInput" role="combobox" aria-label="이름 또는 부서 검색" aria-autocomplete="list" aria-expanded="false" aria-controls="searchResults" autocomplete="off" enterkeyhint="search" placeholder="이름 또는 부서 검색 (동명이인은 알파벳까지 정확히 입력)" class="h-full pl-10 pr-8 w-full bg-white border border-stone-300 text-stone-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#4F81BD] focus:border-transparent transition-all shadow-sm">
+                <button id="clearSearchBtn" title="검색 지우기" aria-label="검색 지우기" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="w-px h-6 bg-stone-300 hidden md:block"></div>
+
+            <div id="searchPopup" hidden><div id="searchSummary" role="status" aria-live="polite"></div><div id="searchResults" role="listbox" aria-label="검색 결과"></div></div>
+            
+            <div class="h-[38px] flex items-center bg-white rounded-lg px-2 border border-stone-300 shadow-sm whitespace-nowrap">
+                <button id="zoomOutBtn" title="축소" class="p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-800 rounded transition"><i class="fa-solid fa-minus text-xs !text-stone-500"></i></button>
+                <span id="zoomVal" aria-live="polite" class="px-2 text-xs font-bold text-stone-700 min-w-[45px] text-center">100%</span>
+                <button id="zoomInBtn" title="확대" class="p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-800 rounded transition"><i class="fa-solid fa-plus text-xs !text-stone-500"></i></button>
+                <div class="w-px h-3 bg-stone-300 mx-1"></div>
+                <button id="zoomResetBtn" title="지도 전체 보기" aria-label="지도 전체 보기" class="p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-800 rounded transition"><i class="fa-solid fa-rotate-right text-xs !text-stone-500"></i></button>
+            </div>
+
+            <button id="fullscreenBtn" type="button" title="전체화면" aria-label="전체화면" aria-pressed="false"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
+            
+            <div class="h-[38px] flex items-center bg-white rounded-lg px-2 border border-stone-300 shadow-sm whitespace-nowrap">
+                <span class="text-xs font-bold text-stone-600 pr-1">글자</span>
+                <button id="fontDecreaseBtn" title="글씨 축소" class="p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-800 rounded transition flex items-center justify-center gap-0.5"><i class="fa-solid fa-font text-[10px] !text-stone-500"></i><i class="fa-solid fa-minus text-[8px] !text-stone-500"></i></button>
+                <div class="w-px h-3 bg-stone-300 mx-1"></div>
+                <button id="fontResetBtn" title="글씨 초기화" class="p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-800 rounded transition flex items-center justify-center"><i class="fa-solid fa-rotate-right text-xs !text-stone-500"></i></button>
+                <div class="w-px h-3 bg-stone-300 mx-1"></div>
+                <button id="fontIncreaseBtn" title="글씨 확대" class="p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-800 rounded transition flex items-center justify-center gap-0.5"><i class="fa-solid fa-font text-[14px] !text-stone-500"></i><i class="fa-solid fa-plus text-[8px] !text-stone-500"></i></button>
+            </div>
+
+            <button id="downloadExcelBtn" title="엑셀 저장" aria-label="엑셀 저장" class="h-[38px] ml-auto px-4 bg-[#4F81BD] hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition shadow-sm flex items-center gap-2 whitespace-nowrap">
+                <i class="fa-solid fa-file-excel !text-white"></i> 저장
+            </button>
+        </div>
+
+        <div id="dirPanel" class="hidden bg-white border-t border-stone-200 shadow-inner w-full overflow-y-auto" style="max-height: 350px;">
+            <div id="dirContent" class="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 max-w-7xl mx-auto w-full"></div>
+        </div>
+    </div>
+
+    <main aria-label="좌석 지도" tabindex="0" class="flex-1 overflow-auto p-4 md:p-10 map-canvas-bg relative grab-mode" id="viewport">
+        <!-- 배경색을 원상 복구 (bg-stone-50) -->
+        <div id="floorplanContainer" class="bg-stone-50 border border-stone-300 shadow-2xl p-6 md:p-10 rounded-3xl relative transition-transform duration-150 origin-top-left flex flex-col gap-4 mx-auto w-max">
+            <div class="flex items-center justify-between pb-4 border-b border-stone-300">
+                <div id="tabTitle" class="flex items-center gap-3 text-stone-800 font-black text-sm tracking-wide">
+                    <span class="w-3.5 h-3.5 bg-[#4F81BD] rounded-full inline-block"></span>
+                    데이터 로딩 중...
+                </div>
+            </div>
+
+            <div id="canvasWrapper" class="overflow-auto max-w-full relative">
+                <div id="dynamicFloorplan"></div>
+            </div>
+        </div>
+    </main>
+
+    <script src="camera.js"></script>
+    <script src="search.js"></script>
+    <script src="app.js"></script>
+
+    <script>
+        (function() {
+            document.addEventListener('DOMContentLoaded', () => {
+                const dirContent = document.getElementById('dirContent');
+                const dirPanel = document.getElementById('dirPanel');
+                const toggleDirBtn = document.getElementById('toggleDirBtn');
+
+                /**
+                 * 수정 사항 1, 2, 3, 5: 부서 및 시설 항목 카테고리 이동 및 추가/제거
+                 */
+                const PATCH_RULES = {
+                    'daerung': { 
+                        facilities: ['실외기', 'A401', 'A601', 'A602', 'A603', 'B601', 'C801', 'C802'], 
+                        depts: [], 
+                        remove: [] 
+                    },
+                    'woorim': { 
+                        facilities: ['401', '402', '601', '602', '603', '604', '실외기', '실외기실'], 
+                        depts: [], 
+                        remove: [] 
+                    },
+                    'dk18': { 
+                        facilities: ['A1201'], 
+                        depts: ['커넥트파이낸스'], 
+                        remove: ['김성실'] 
+                    },
+                    'dk17': { facilities: [], depts: [], remove: [] },
+                    'gplus': { 
+                        facilities: ['남자휴게실', '비즈센터 교육장', '샤워실(남)', '샤워실(여)', '세미나실', '여자휴게실', '휴게실', '카페테리아'], 
+                        depts: [], 
+                        remove: [] 
+                    }
+                };
+
+                let isPatching = false;
+                
+                const applyDirectoryPatches = () => {
+                    if (isPatching || !dirContent) return;
+                    
+                    const activeBtn = document.querySelector('.tab-btn.bg-\\[\\#4F81BD\\]') || 
+                                      document.querySelector('.tab-btn.text-white');
+                    const tab = activeBtn ? activeBtn.dataset.tab : document.body.dataset.office;
+                    const rules = PATCH_RULES[tab];
+                    
+                    if (!rules) return;
+
+                    isPatching = true; // 무한 루프 방지
+
+                    try {
+                        let deptTitle = null;
+                        let facTitle = null;
+
+                        // 텍스트 기반으로 정확하게 "부서 및 팀", "회의실 및 시설" 컨테이너 식별
+                        const walker = document.createTreeWalker(dirContent, NodeFilter.SHOW_TEXT, null, false);
+                        let node;
+                        while ((node = walker.nextNode())) {
+                            const text = node.nodeValue.trim();
+                            if (text === '부서 및 팀') {
+                                deptTitle = node.parentElement;
+                                while(deptTitle.parentElement && deptTitle.parentElement.parentElement !== dirContent && !['H2','H3','H4','DIV'].includes(deptTitle.tagName)) {
+                                    deptTitle = deptTitle.parentElement;
+                                }
+                            }
+                            if (text === '회의실 및 시설') {
+                                facTitle = node.parentElement;
+                                while(facTitle.parentElement && facTitle.parentElement.parentElement !== dirContent && !['H2','H3','H4','DIV'].includes(facTitle.tagName)) {
+                                    facTitle = facTitle.parentElement;
+                                }
+                            }
+                        }
+
+                        // 헤더 다음에 오는 리스트 컨테이너(ul, grid 등) 찾기
+                        const getListContainer = (titleEl) => {
+                            if (!titleEl) return null;
+                            let next = titleEl.nextElementSibling;
+                            if (next && (next.tagName === 'UL' || next.classList.contains('grid') || next.classList.contains('flex'))) return next;
+                            if (titleEl.parentElement && titleEl.parentElement.children.length > 1) {
+                                let container = titleEl.parentElement.querySelector('ul, .grid, .flex');
+                                if (container && container !== titleEl) return container;
+                            }
+                            return titleEl.parentElement;
+                        };
+
+                        let deptContainer = getListContainer(deptTitle);
+                        let facContainer = getListContainer(facTitle);
+
+                        // 아이템 찾기 함수
+                        const findItemElements = (text) => {
+                            const matches = [];
+                            const itemWalker = document.createTreeWalker(dirContent, NodeFilter.SHOW_TEXT, null, false);
+                            let itemNode;
+                            while ((itemNode = itemWalker.nextNode())) {
+                                if (itemNode.nodeValue.trim() === text) {
+                                    matches.push(itemNode.parentElement);
+                                }
+                            }
+                            
+                            return matches.map(el => {
+                                let wrapper = el;
+                                while(wrapper.parentElement && wrapper.parentElement !== deptContainer && wrapper.parentElement !== facContainer && wrapper.parentElement !== dirContent) {
+                                    if (wrapper.tagName === 'BUTTON' || wrapper.tagName === 'LI' || wrapper.classList.contains('cursor-pointer') || wrapper.tagName === 'A') {
+                                        return wrapper;
+                                    }
+                                    wrapper = wrapper.parentElement;
+                                }
+                                return wrapper;
+                            });
+                        };
+
+                        // 1. 항목 제거 (예: 김성실)
+                        rules.remove.forEach(name => {
+                            findItemElements(name).forEach(item => item.remove());
+                        });
+
+                        // 2. 카테고리 할당 (이동 및 생성)
+                        const ensureItems = (names, container, otherContainer) => {
+                            if (!container || names.length === 0) return;
+                            let target = container.querySelector('.grid, ul, .flex') || container;
+                            
+                            const existingItem = target.querySelector('button, li, div.cursor-pointer') || 
+                                                 (otherContainer && otherContainer.querySelector('button, li, div.cursor-pointer'));
+                            
+                            names.forEach(name => {
+                                const items = findItemElements(name);
+                                if (items.length > 0) {
+                                    // 기존 아이템이 있다면 목표 카테고리로 이동
+                                    items.forEach(item => {
+                                        if (!target.contains(item)) target.appendChild(item);
+                                    });
+                                } else if (existingItem) {
+                                    // 기존 리스트에 없다면 새 항목 생성 (예: 우림 401호, 커넥트파이낸스)
+                                    const clone = existingItem.cloneNode(true);
+                                    const textNodes = Array.from(clone.querySelectorAll('*')).filter(el => 
+                                        el.childNodes.length === 1 && el.childNodes[0].nodeType === 3 && el.textContent.trim().length > 0
+                                    );
+                                    if (textNodes.length > 0) {
+                                        textNodes[textNodes.length - 1].textContent = name;
+                                    } else {
+                                        clone.textContent = name;
+                                    }
+                                    
+                                    // 검색바와 연동하여 커스텀 클릭 이벤트 지정
+                                    clone.addEventListener('click', (e) => {
+                                        e.stopPropagation();
+                                        const searchInput = document.getElementById('searchInput');
+                                        if(searchInput) {
+                                            searchInput.value = name;
+                                            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                            searchInput.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, keyCode: 13, key: 'Enter' }));
+                                            searchInput.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, keyCode: 13, key: 'Enter' }));
+                                        }
+                                    });
+                                    target.appendChild(clone);
+                                }
+                            });
+                        };
+
+                        ensureItems(rules.facilities, facContainer, deptContainer);
+                        ensureItems(rules.depts, deptContainer, facContainer);
+
+                    } catch(e) {
+                        console.error("Directory Patching Error:", e);
+                    } finally {
+                        isPatching = false;
+                    }
+                };
+
+                // app.js가 dirContent를 렌더링(업데이트)할 때마다 변경 사항 적용 감지
+                const observer = new MutationObserver((mutations) => {
+                    let shouldPatch = false;
+                    for (let m of mutations) {
+                        if (m.addedNodes.length > 0) {
+                            shouldPatch = true;
+                            break;
+                        }
+                    }
+                    if (shouldPatch) {
+                        setTimeout(applyDirectoryPatches, 100);
+                    }
+                });
+
+                if (dirContent) {
+                    observer.observe(dirContent, { childList: true, subtree: true });
+                    // 초기 로드 대비 수동 1회 실행
+                    setTimeout(applyDirectoryPatches, 300);
+                }
+
+                // 실시간 검색 패치: 입력창에 타이핑 시 즉각적으로 검색(엔터 이벤트) 발생
+                const searchInput = document.getElementById('searchInput');
+                if (searchInput) {
+                    let searchTimeout;
+                    searchInput.addEventListener('input', function(e) {
+                        // 스크립트로 강제 발생시킨 이벤트일 경우 무한루프 방지를 위해 제외
+                        if (!e.isTrusted) return;
+                        
+                        clearTimeout(searchTimeout);
+                        searchTimeout = setTimeout(() => {
+                            const enterDownEvent = new KeyboardEvent('keydown', {
+                                bubbles: true, cancelable: true, keyCode: 13, key: 'Enter'
+                            });
+                            const enterUpEvent = new KeyboardEvent('keyup', {
+                                bubbles: true, cancelable: true, keyCode: 13, key: 'Enter'
+                            });
+                            searchInput.dispatchEvent(enterDownEvent);
+                            searchInput.dispatchEvent(enterUpEvent);
+                        }, 150); // 0.15초 대기 후 자동 실행 (타이핑 과부하 방지)
+                    });
+                }
+
+                // 1, 2번 수정 사항: 특정 텍스트 세로 표기 처리
+                const floorplanContainer = document.getElementById('dynamicFloorplan');
+                const verticalTargets = ["사업관리팀", "제휴비즈니스팀", "셀피아팀", "마케팅팀", "김성실"];
+                
+                const applyVerticalText = () => {
+                    if (!floorplanContainer) return;
+                    const tds = floorplanContainer.querySelectorAll('td');
+                    tds.forEach(td => {
+                        if (!td.dataset.verticalApplied) {
+                            const text = td.textContent.trim(); 
+                            let applyVertical = verticalTargets.includes(text);
+                            
+                            // 특수 케이스: "품질관리팀"은 지도상 2곳에 존재함 (왼쪽 좁은 구역, 오른쪽 넓은 구역)
+                            // 가로로 넓게 병합된 셀(colSpan > 1)은 가로 표기 유지, 좁거나 세로로 긴 셀은 세로 표기 적용
+                            if (text === "품질관리팀") {
+                                if (td.colSpan > 1) {
+                                    applyVertical = false; // 오른쪽 하단의 가로 영역
+                                } else {
+                                    applyVertical = true;  // 왼쪽의 세로 영역
+                                }
+                            }
+
+                            // 대상 목록에 포함된 텍스트일 경우 세로 표기로 변환
+                            if (applyVertical) {
+                                td.innerHTML = text.split('').join('<br>');
+                                td.dataset.verticalApplied = "true"; // 중복 적용 방지
+                                td.style.lineHeight = "1.15";
+                                td.style.padding = "2px 0";
+                            }
+                        }
+                    });
+                };
+
+                // 배치도가 업데이트 될 때마다 세로 표기 함수 실행
+                if (floorplanContainer) {
+                    const floorplanObserver = new MutationObserver(() => {
+                        applyVerticalText();
+                    });
+                    floorplanObserver.observe(floorplanContainer, { childList: true, subtree: true });
+                    // 초기 로드 대비 수동 1회 실행
+                    setTimeout(applyVerticalText, 500);
+                }
+
+                // --- 실시간 검색 (한국어 IME 조합 중 즉각 반응 패치) ---
+                const searchInputBox = document.getElementById('searchInput');
+                if (searchInputBox) {
+                    let liveSearchTimer;
+                    
+                    const forceSearch = () => {
+                        // 1. 기존 스크립트가 composition(조합) 중단만 기다릴 경우를 대비해 end 이벤트 강제 발생
+                        searchInputBox.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+                        
+                        // 2. keyup 이벤트 발생 (한국어 입력 중 발생하는 keyCode 229를 무시하는 기존 로직 우회용)
+                        const fakeKeyup = new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'a', keyCode: 65 });
+                        Object.defineProperty(fakeKeyup, 'keyCode', { get: () => 65 });
+                        Object.defineProperty(fakeKeyup, 'which', { get: () => 65 });
+                        searchInputBox.dispatchEvent(fakeKeyup);
+                        
+                        // 3. 엔터키(Enter) 이벤트 추가 발생
+                        const enterKeyup = new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'Enter', keyCode: 13 });
+                        Object.defineProperty(enterKeyup, 'keyCode', { get: () => 13 });
+                        Object.defineProperty(enterKeyup, 'which', { get: () => 13 });
+                        searchInputBox.dispatchEvent(enterKeyup);
+                    };
+
+                    searchInputBox.addEventListener('input', (e) => {
+                        if (!e.isTrusted) return; // 무한루프 방지
+                        
+                        clearTimeout(liveSearchTimer);
+                        // 타이핑 디바운싱: 0.15초 대기 후 강제로 검색 이벤트를 실행
+                        liveSearchTimer = setTimeout(forceSearch, 150);
+                    });
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
