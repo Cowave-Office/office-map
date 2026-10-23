@@ -34,7 +34,7 @@
             --seat-font-size: 10px; /* 글자 크기 변수화 */
         }
         
-        body { -webkit-font-smoothing: antialiased; touch-action: none; /* 모바일 브라우저 기본 제스처 방지 */ }
+        body { -webkit-font-smoothing: antialiased; touch-action: manipulation; }
         .fa-solid { color: #4F81BD !important; }
         
         .header-icon { color: #4F81BD !important; }
@@ -112,6 +112,303 @@
         }
     </style>
 <link rel="stylesheet" href="map.css">
+
+    <style id="cw-index-ux-patch">
+        /* 지도 영역만 터치 제스처를 제어하고 검색 입력창은 OS 기본 편집 동작을 유지 */
+        #viewport { touch-action: none; }
+        #searchInput {
+            touch-action: auto !important;
+            -webkit-user-select: text !important;
+            user-select: text !important;
+            caret-color: auto;
+        }
+
+        /* 독립 검색 결과 패널 */
+        #searchBox { z-index: 90; }
+        #searchBox #searchPopup {
+            position: absolute;
+            top: calc(100% + 7px);
+            left: 0;
+            right: 0;
+            z-index: 200;
+            max-height: 340px;
+            overflow-y: auto;
+            background: rgba(255,255,255,.98);
+            border: 1px solid #d6d3d1;
+            border-radius: 12px;
+            box-shadow: 0 14px 30px rgba(0,0,0,.16);
+            padding: 6px;
+        }
+        #searchBox #searchPopup[hidden] { display: none !important; }
+        #searchSummary {
+            padding: 7px 10px 6px;
+            color: #78716c;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .cw-search-result {
+            width: 100%;
+            border: 0;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 9px 10px;
+            border-radius: 9px;
+            text-align: left;
+            cursor: pointer;
+            color: #292524;
+        }
+        .cw-search-result:hover,
+        .cw-search-result[aria-selected="true"] { background: #eff6ff; }
+        .cw-search-result .cw-result-main {
+            min-width: 0;
+            font-size: 13px;
+            font-weight: 800;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .cw-search-result .cw-result-meta {
+            flex: none;
+            font-size: 10px;
+            font-weight: 800;
+            color: #4F81BD;
+            background: #eff6ff;
+            border: 1px solid #dbeafe;
+            border-radius: 999px;
+            padding: 3px 7px;
+        }
+
+        /* 회의실/시설: 각 셀의 실제 크기에 맞춰 JS가 가능한 최대 글자 크기를 계산 */
+        .excel-table-layout td.cw-facility-cell {
+            font-weight: 800 !important;
+            line-height: 1.08 !important;
+            writing-mode: horizontal-tb !important;
+            text-orientation: mixed !important;
+            overflow: hidden !important;
+        }
+
+        /* 셀 안 텍스트를 독립 레이어로 표시해 기존 세로쓰기/<br> 영향을 완전히 차단 */
+        .excel-table-layout td .cw-cell-label {
+            position: absolute !important;
+            inset: 1px 2px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            writing-mode: horizontal-tb !important;
+            text-orientation: mixed !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
+            line-height: 1.08 !important;
+            font-weight: inherit !important;
+            pointer-events: none !important;
+        }
+
+        /* 세로로 깨지던 특정 공간/팀명은 한 줄 가로표기를 최우선으로 유지 */
+        .excel-table-layout td.cw-force-horizontal,
+        .excel-table-layout td.cw-force-horizontal .cw-cell-label {
+            writing-mode: horizontal-tb !important;
+            text-orientation: mixed !important;
+            white-space: nowrap !important;
+            word-break: normal !important;
+            overflow-wrap: normal !important;
+            overflow: hidden !important;
+        }
+
+        /* 라운지: 출입문의 연녹색과 혼동되지 않도록 따뜻한 살구/앰버 계열로 구분 */
+        .excel-table-layout td.cw-lounge-cell {
+            background-color: #FCE8D5 !important;
+            color: #7A472A !important;
+            border-color: #D9A277 !important;
+        }
+
+        /* 향후 엑셀 셀에 '비상계단'을 입력하면 자동 적용되는 안전 표기 */
+        .excel-table-layout td.cw-emergency-stair-cell {
+            background-color: #DCFCE7 !important;
+            color: #166534 !important;
+            border: 2px solid #22C55E !important;
+            font-weight: 900 !important;
+            writing-mode: horizontal-tb !important;
+            overflow: hidden !important;
+        }
+        .excel-table-layout td.cw-emergency-stair-cell::before {
+            content: "↗";
+            display: inline-block;
+            margin-right: 3px;
+            font-weight: 900;
+        }
+
+
+        /* 전체 리스트: 상단 확장 대신 지도 왼쪽의 독립 사이드바로 표시 */
+        #workspaceShell { min-width: 0; min-height: 0; }
+        #dirPanel {
+            width: clamp(280px, 24vw, 360px);
+            flex: 0 0 clamp(280px, 24vw, 360px);
+            max-height: none !important;
+            border-top: 0 !important;
+            background: rgba(255,255,255,.98);
+            position: relative;
+            z-index: 25;
+        }
+        #dirPanel:not(.hidden) { display: block !important; height: 100%; min-height: 0; visibility: visible !important; }
+        #dirContent {
+            display: block !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 16px !important;
+        }
+        #dirContent > * + * { margin-top: 22px; }
+        #dirContent .grid { grid-template-columns: 1fr !important; }
+
+        /* 좌측 전체리스트 - 기존 '부서 및 팀 / 회의실 및 시설' 구성을 사이드바에 맞게 복원 */
+        .cw-dir-section {
+            border: 1px solid #e7e5e4; border-radius: 12px; background: #ffffff;
+            overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.04);
+        }
+        .cw-dir-section + .cw-dir-section { margin-top: 14px !important; }
+        .cw-dir-title {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            padding: 11px 12px; background: #f8fafc; border-bottom: 1px solid #e7e5e4;
+            color: #334155; font-size: 13px; font-weight: 900; position: sticky; top: 0; z-index: 2;
+        }
+        .cw-dir-title .cw-dir-count {
+            flex: none; min-width: 24px; padding: 2px 7px; border-radius: 999px;
+            background: #eaf2fb; color: #4F81BD; font-size: 10px; font-weight: 900; text-align: center;
+        }
+        .cw-dir-list { display: grid !important; grid-template-columns: 1fr !important; gap: 5px !important; padding: 8px !important; }
+        .cw-dir-item {
+            width: 100%; min-height: 32px; display: flex; align-items: center; gap: 8px; padding: 7px 9px;
+            border: 1px solid transparent; border-radius: 8px; background: #fff; color: #44403c;
+            font-size: 12px; font-weight: 700; text-align: left; cursor: pointer; transition: .12s ease;
+        }
+        .cw-dir-item::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 999px; background: #94a3b8; }
+        .cw-dir-section[data-kind="facility"] .cw-dir-item::before { background: #4F81BD; }
+        .cw-dir-item:hover, .cw-dir-item:focus-visible {
+            background: #eff6ff; border-color: #bfdbfe; color: #1e3a5f; outline: none;
+        }
+        .cw-dir-empty { padding: 14px 10px; color: #a8a29e; font-size: 11px; text-align: center; }
+
+        #viewport { min-width: 0; }
+        @media (max-width: 720px) {
+            #dirPanel { width: 260px; flex-basis: 260px; }
+            #dirContent { padding: 12px !important; }
+        }
+    </style>
+
+
+<style id="cw-sidebar-final-fix">
+  /* FINAL: 전체리스트는 지도와 같은 행의 왼쪽 열에 고정 */
+  #workspaceShell{
+    position:relative !important;
+    display:flex !important;
+    flex-direction:row !important;
+    flex-wrap:nowrap !important;
+    align-items:stretch !important;
+    justify-content:flex-start !important;
+    width:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    overflow:hidden !important;
+  }
+  #workspaceShell > #dirPanel{
+    position:relative !important;
+    order:0 !important;
+    flex:0 0 clamp(300px,22vw,360px) !important;
+    width:clamp(300px,22vw,360px) !important;
+    min-width:300px !important;
+    max-width:360px !important;
+    height:100% !important;
+    min-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    inset:auto !important;
+    top:auto !important;
+    right:auto !important;
+    bottom:auto !important;
+    left:auto !important;
+    transform:none !important;
+    float:none !important;
+    clear:none !important;
+    align-self:stretch !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    background:#fff !important;
+    border-right:1px solid #d6d3d1 !important;
+    border-top:0 !important;
+    z-index:30 !important;
+  }
+  #workspaceShell > #dirPanel.hidden{display:none !important;}
+  #workspaceShell > #dirPanel:not(.hidden){display:block !important;}
+  #workspaceShell > #viewport{
+    position:relative !important;
+    order:1 !important;
+    flex:1 1 auto !important;
+    width:auto !important;
+    min-width:0 !important;
+    height:100% !important;
+    margin:0 !important;
+  }
+  #dirContent{
+    position:static !important;
+    display:block !important;
+    width:100% !important;
+    max-width:none !important;
+    min-height:0 !important;
+    margin:0 !important;
+    padding:14px !important;
+    transform:none !important;
+  }
+  #dirContent .cw-dir-section{margin:0 0 14px 0 !important;}
+  #dirContent .cw-dir-title{position:static !important; margin:0 !important;}
+  @media(max-width:720px){
+    #workspaceShell > #dirPanel{
+      flex-basis:280px !important;
+      width:280px !important;
+      min-width:280px !important;
+      max-width:280px !important;
+    }
+  }
+</style>
+
+<style id="cw-search-layer-and-directory-highlight-fix">
+  #secondaryToolbar{position:relative!important;z-index:120!important;overflow:visible!important;}
+  #secondaryToolbar>div{overflow:visible!important;}
+  #searchBox{position:relative!important;z-index:140!important;overflow:visible!important;}
+  #searchBox #searchPopup,#searchPopup{z-index:9999!important;}
+  #workspaceShell>#dirPanel{z-index:20!important;}
+  @keyframes cw-directory-pulse{0%{box-shadow:0 0 0 0 rgba(245,158,11,.75)}55%{box-shadow:0 0 0 8px rgba(245,158,11,0)}100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}}
+  .cw-directory-highlight{outline:3px solid #f59e0b!important;outline-offset:1px!important;background-color:#f59e0b!important;color:#fff!important;font-weight:900!important;z-index:70!important;position:relative!important;animation:cw-directory-pulse 1.05s ease-out infinite!important;}
+  .cw-directory-highlight .cw-cell-label{color:#fff!important;font-weight:900!important;}
+</style>
+
+
+<style id="cw-gplus-door-opening-fix-v2">
+  /*
+   * GPlus entrance rendering fix.
+   * Horizontal entrance cells break the horizontal wall only.
+   * Vertical entrance cells break the vertical wall only.
+   * "hidden" is intentionally used because it wins in collapsed-border conflict resolution.
+   */
+  #dynamicFloorplan td.cw-gplus-door-horizontal {
+      border-top-style: hidden !important;
+      border-bottom-style: hidden !important;
+  }
+
+  #dynamicFloorplan td.cw-gplus-door-vertical {
+      border-left-style: hidden !important;
+      border-right-style: hidden !important;
+  }
+
+  #dynamicFloorplan td.cw-gplus-door-horizontal .cw-cell-label,
+  #dynamicFloorplan td.cw-gplus-door-vertical .cw-cell-label {
+      outline: none !important;
+      box-shadow: none !important;
+  }
+</style>
+
 </head>
 <body data-office="daerung" data-design="original" class="bg-stone-100 text-stone-800 h-screen flex flex-col overflow-hidden font-sans antialiased">
 
@@ -119,13 +416,12 @@
         
         <div class="flex items-center gap-3.5 mb-2 md:mb-0">
             <div id="adminLoginBtn" class="p-1.5 bg-white rounded-xl shadow-sm border border-stone-200 cursor-pointer hover:bg-stone-50 transition flex items-center justify-center" title="관리자 모드">
-                <img src="image_60fd0b.png" alt="관리자 로고" class="w-7 h-7 object-contain rounded-full">
+                <img src="image_60fd0b.png" alt="관리자 로고" class="w-7 h-7 object-contain rounded-full" onerror="this.src='https://placehold.co/28x28/4F81BD/FFFFFF?text=Admin'">
             </div>
             <div>
                 <h1 class="text-xl font-extrabold tracking-tight flex items-center gap-2.5 text-stone-800">
-                    커넥트웨이브 통합 공간배치도<span class="header-subtitle">(좌석 및 시설 안내)</span>
+                    커넥트웨이브 통합 공간배치도<span class="header-subtitle text-sm font-medium text-stone-500">(좌석 및 시설 안내)</span>
                 </h1>
-               
             </div>
         </div>
 
@@ -187,7 +483,7 @@
             <!-- 전 지점 통합 검색창 -->
             <div id="searchBox" class="relative flex-1 min-w-[200px] max-w-md h-[38px]">
                 <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 text-sm"></i>
-                <input type="text" id="searchInput" role="combobox" aria-label="이름 또는 부서 검색" aria-autocomplete="list" aria-expanded="false" aria-controls="searchResults" autocomplete="off" enterkeyhint="search" placeholder="이름 또는 부서 검색 (동명이인은 알파벳까지 정확히 입력)" class="h-full pl-10 pr-8 w-full bg-white border border-stone-300 text-stone-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#4F81BD] focus:border-transparent transition-all shadow-sm">
+                <input type="text" id="searchInput" role="combobox" aria-label="이름 또는 부서 검색" aria-autocomplete="list" aria-expanded="false" aria-controls="searchResults" autocomplete="off" enterkeyhint="search" placeholder="이름 또는 부서 검색 (동명이인은 풀네임 입력 후 선택)" class="h-full pl-10 pr-8 w-full bg-white border border-stone-300 text-stone-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#4F81BD] focus:border-transparent transition-all shadow-sm">
                 <button id="clearSearchBtn" title="검색 지우기" aria-label="검색 지우기" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
@@ -221,315 +517,1242 @@
             </button>
         </div>
 
-        <div id="dirPanel" class="hidden bg-white border-t border-stone-200 shadow-inner w-full overflow-y-auto" style="max-height: 350px;">
-            <div id="dirContent" class="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 max-w-7xl mx-auto w-full"></div>
-        </div>
     </div>
 
-    <main aria-label="좌석 지도" tabindex="0" class="flex-1 overflow-auto p-4 md:p-10 map-canvas-bg relative grab-mode" id="viewport">
-        <!-- 배경색을 원상 복구 (bg-stone-50) -->
-        <div id="floorplanContainer" class="bg-stone-50 border border-stone-300 shadow-2xl p-6 md:p-10 rounded-3xl relative transition-transform duration-150 origin-top-left flex flex-col gap-4 mx-auto w-max">
-            <div class="flex items-center justify-between pb-4 border-b border-stone-300">
-                <div id="tabTitle" class="flex items-center gap-3 text-stone-800 font-black text-sm tracking-wide">
-                    <span class="w-3.5 h-3.5 bg-[#4F81BD] rounded-full inline-block"></span>
-                    데이터 로딩 중...
+    <div id="workspaceShell" class="flex-1 min-h-0 flex overflow-hidden">
+        <aside id="dirPanel" class="hidden bg-white border-r border-stone-200 shadow-inner overflow-y-auto shrink-0" aria-label="전체 리스트">
+            <div id="dirContent" class="w-full"></div>
+        </aside>
+
+        <main aria-label="좌석 지도" tabindex="0" class="flex-1 min-w-0 overflow-auto p-4 md:p-10 map-canvas-bg relative grab-mode" id="viewport">
+            <!-- 배경색을 원상 복구 (bg-stone-50) -->
+            <div id="floorplanContainer" class="bg-stone-50 border border-stone-300 shadow-2xl p-6 md:p-10 rounded-3xl relative transition-transform duration-150 origin-top-left flex flex-col gap-4 mx-auto w-max">
+                <div class="flex items-center justify-between pb-4 border-b border-stone-300">
+                    <div id="tabTitle" class="flex items-center gap-3 text-stone-800 font-black text-sm tracking-wide">
+                        <span class="w-3.5 h-3.5 bg-[#4F81BD] rounded-full inline-block"></span>
+                        데이터 로딩 중...
+                    </div>
+                </div>
+
+                <div id="canvasWrapper" class="overflow-auto max-w-full relative">
+                    <div id="dynamicFloorplan"></div>
                 </div>
             </div>
-
-            <div id="canvasWrapper" class="overflow-auto max-w-full relative">
-                <div id="dynamicFloorplan"></div>
-            </div>
-        </div>
-    </main>
+        </main>
+    </div>
 
     <script src="camera.js"></script>
     <script src="search.js"></script>
     <script src="app.js"></script>
 
-    <script>
-        (function() {
+
+    <script id="cw-embedded-search-index" type="application/json">[{"tab":"daerung","office":"대륭","address":"AC2","row":1,"col":28,"text":"대회의실","key":"대회의실"},{"tab":"daerung","office":"대륭","address":"AJ2","row":1,"col":35,"text":"대륭오피스 라운지","key":"대륭오피스 라운지"},{"tab":"daerung","office":"대륭","address":"D3","row":2,"col":3,"text":"CC CTO B구역","key":"cc cto b구역"},{"tab":"daerung","office":"대륭","address":"BC3","row":2,"col":54,"text":"CC CTO C구역","key":"cc cto c구역"},{"tab":"daerung","office":"대륭","address":"F7","row":6,"col":5,"text":"곽경민","key":"곽경민"},{"tab":"daerung","office":"대륭","address":"M7","row":6,"col":12,"text":"이경임","key":"이경임"},{"tab":"daerung","office":"대륭","address":"N7","row":6,"col":13,"text":"주찬민","key":"주찬민"},{"tab":"daerung","office":"대륭","address":"P7","row":6,"col":15,"text":"김다빈","key":"김다빈"},{"tab":"daerung","office":"대륭","address":"Q7","row":6,"col":16,"text":"조영승","key":"조영승"},{"tab":"daerung","office":"대륭","address":"T7","row":6,"col":19,"text":"진두현","key":"진두현"},{"tab":"daerung","office":"대륭","address":"U7","row":6,"col":20,"text":"이현수","key":"이현수"},{"tab":"daerung","office":"대륭","address":"W7","row":6,"col":22,"text":"정재형","key":"정재형"},{"tab":"daerung","office":"대륭","address":"X7","row":6,"col":23,"text":"천진아","key":"천진아"},{"tab":"daerung","office":"대륭","address":"BG7","row":6,"col":58,"text":"이진욱","key":"이진욱"},{"tab":"daerung","office":"대륭","address":"BH7","row":6,"col":59,"text":"고판석","key":"고판석"},{"tab":"daerung","office":"대륭","address":"BS7","row":6,"col":70,"text":"공유 좌석","key":"공유 좌석"},{"tab":"daerung","office":"대륭","address":"I8","row":7,"col":8,"text":"윤재열","key":"윤재열"},{"tab":"daerung","office":"대륭","address":"C9","row":8,"col":2,"text":"박범혁","key":"박범혁"},{"tab":"daerung","office":"대륭","address":"Z9","row":8,"col":25,"text":"수신플랫폼개발팀","key":"수신플랫폼개발팀"},{"tab":"daerung","office":"대륭","address":"BB9","row":8,"col":53,"text":"우상협","key":"우상협"},{"tab":"daerung","office":"대륭","address":"BJ9","row":8,"col":61,"text":"이혜경","key":"이혜경"},{"tab":"daerung","office":"대륭","address":"BT9","row":8,"col":71,"text":"박정훈","key":"박정훈"},{"tab":"daerung","office":"대륭","address":"F10","row":9,"col":5,"text":"전형진","key":"전형진"},{"tab":"daerung","office":"대륭","address":"G10","row":9,"col":6,"text":"이지희","key":"이지희"},{"tab":"daerung","office":"대륭","address":"I10","row":9,"col":8,"text":"박경성","key":"박경성"},{"tab":"daerung","office":"대륭","address":"J10","row":9,"col":9,"text":"양진석","key":"양진석"},{"tab":"daerung","office":"대륭","address":"M10","row":9,"col":12,"text":"오경미","key":"오경미"},{"tab":"daerung","office":"대륭","address":"P10","row":9,"col":15,"text":"박철","key":"박철"},{"tab":"daerung","office":"대륭","address":"Q10","row":9,"col":16,"text":"김도훈","key":"김도훈"},{"tab":"daerung","office":"대륭","address":"T10","row":9,"col":19,"text":"김동훈","key":"김동훈"},{"tab":"daerung","office":"대륭","address":"W10","row":9,"col":22,"text":"김명수","key":"김명수"},{"tab":"daerung","office":"대륭","address":"X10","row":9,"col":23,"text":"강두한","key":"강두한"},{"tab":"daerung","office":"대륭","address":"AA10","row":9,"col":26,"text":"김성호","key":"김성호"},{"tab":"daerung","office":"대륭","address":"BB10","row":9,"col":53,"text":"노병원","key":"노병원"},{"tab":"daerung","office":"대륭","address":"BC10","row":9,"col":54,"text":"신은정","key":"신은정"},{"tab":"daerung","office":"대륭","address":"BG10","row":9,"col":58,"text":"박해빈","key":"박해빈"},{"tab":"daerung","office":"대륭","address":"BH10","row":9,"col":59,"text":"김세진","key":"김세진"},{"tab":"daerung","office":"대륭","address":"BJ10","row":9,"col":61,"text":"최진혁","key":"최진혁"},{"tab":"daerung","office":"대륭","address":"BO10","row":9,"col":66,"text":"양귀현","key":"양귀현"},{"tab":"daerung","office":"대륭","address":"BP10","row":9,"col":67,"text":"유다빈","key":"유다빈"},{"tab":"daerung","office":"대륭","address":"BT10","row":9,"col":71,"text":"신의진","key":"신의진"},{"tab":"daerung","office":"대륭","address":"BU10","row":9,"col":72,"text":"김나현A","key":"김나현a"},{"tab":"daerung","office":"대륭","address":"C12","row":11,"col":2,"text":"김경현","key":"김경현"},{"tab":"daerung","office":"대륭","address":"AB12","row":11,"col":27,"text":"장민재","key":"장민재"},{"tab":"daerung","office":"대륭","address":"F13","row":12,"col":5,"text":"홍순주","key":"홍순주"},{"tab":"daerung","office":"대륭","address":"G13","row":12,"col":6,"text":"함석명","key":"함석명"},{"tab":"daerung","office":"대륭","address":"I13","row":12,"col":8,"text":"김수인","key":"김수인"},{"tab":"daerung","office":"대륭","address":"J13","row":12,"col":9,"text":"한만기","key":"한만기"},{"tab":"daerung","office":"대륭","address":"M13","row":12,"col":12,"text":"안수아","key":"안수아"},{"tab":"daerung","office":"대륭","address":"N13","row":12,"col":13,"text":"양진원","key":"양진원"},{"tab":"daerung","office":"대륭","address":"P13","row":12,"col":15,"text":"김민영","key":"김민영"},{"tab":"daerung","office":"대륭","address":"Q13","row":12,"col":16,"text":"송성호","key":"송성호"},{"tab":"daerung","office":"대륭","address":"T13","row":12,"col":19,"text":"이현우","key":"이현우"},{"tab":"daerung","office":"대륭","address":"W13","row":12,"col":22,"text":"도원진","key":"도원진"},{"tab":"daerung","office":"대륭","address":"BB13","row":12,"col":53,"text":"김종혁","key":"김종혁"},{"tab":"daerung","office":"대륭","address":"BC13","row":12,"col":54,"text":"한주연","key":"한주연"},{"tab":"daerung","office":"대륭","address":"BG13","row":12,"col":58,"text":"송혜지","key":"송혜지"},{"tab":"daerung","office":"대륭","address":"BH13","row":12,"col":59,"text":"유승윤","key":"유승윤"},{"tab":"daerung","office":"대륭","address":"BJ13","row":12,"col":61,"text":"이주이","key":"이주이"},{"tab":"daerung","office":"대륭","address":"BO13","row":12,"col":66,"text":"신인수","key":"신인수"},{"tab":"daerung","office":"대륭","address":"BP13","row":12,"col":67,"text":"손진욱","key":"손진욱"},{"tab":"daerung","office":"대륭","address":"BT13","row":12,"col":71,"text":"김영춘","key":"김영춘"},{"tab":"daerung","office":"대륭","address":"BU13","row":12,"col":72,"text":"태상혁","key":"태상혁"},{"tab":"daerung","office":"대륭","address":"C15","row":14,"col":2,"text":"최규빈","key":"최규빈"},{"tab":"daerung","office":"대륭","address":"AB15","row":14,"col":27,"text":"김재영","key":"김재영"},{"tab":"daerung","office":"대륭","address":"F16","row":15,"col":5,"text":"AI개발팀","key":"ai개발팀"},{"tab":"daerung","office":"대륭","address":"I16","row":15,"col":8,"text":"플랫폼개발팀","key":"플랫폼개발팀"},{"tab":"daerung","office":"대륭","address":"M16","row":15,"col":12,"text":"샵다나와개발팀","key":"샵다나와개발팀"},{"tab":"daerung","office":"대륭","address":"P16","row":15,"col":15,"text":"빅데이터플랫폼개발실","key":"빅데이터플랫폼개발실"},{"tab":"daerung","office":"대륭","address":"W16","row":15,"col":22,"text":"통합DBA팀","key":"통합dba팀"},{"tab":"daerung","office":"대륭","address":"BB16","row":15,"col":53,"text":"FE개발팀","key":"fe개발팀"},{"tab":"daerung","office":"대륭","address":"BG16","row":15,"col":58,"text":"BE개발팀","key":"be개발팀"},{"tab":"daerung","office":"대륭","address":"BJ16","row":15,"col":61,"text":"다나와서비스개발실","key":"다나와서비스개발실"},{"tab":"daerung","office":"대륭","address":"BO16","row":15,"col":66,"text":"앱개발팀","key":"앱개발팀"},{"tab":"daerung","office":"대륭","address":"G17","row":16,"col":6,"text":"오피스개발팀","key":"오피스개발팀"},{"tab":"daerung","office":"대륭","address":"M17","row":16,"col":12,"text":"빌링플랫폼개발팀","key":"빌링플랫폼개발팀"},{"tab":"daerung","office":"대륭","address":"T17","row":16,"col":19,"text":"검색플랫폼개발팀","key":"검색플랫폼개발팀"},{"tab":"daerung","office":"대륭","address":"F18","row":17,"col":5,"text":"김지순","key":"김지순"},{"tab":"daerung","office":"대륭","address":"G18","row":17,"col":6,"text":"이주영","key":"이주영"},{"tab":"daerung","office":"대륭","address":"I18","row":17,"col":8,"text":"김상원","key":"김상원"},{"tab":"daerung","office":"대륭","address":"J18","row":17,"col":9,"text":"임승우","key":"임승우"},{"tab":"daerung","office":"대륭","address":"M18","row":17,"col":12,"text":"윤선우","key":"윤선우"},{"tab":"daerung","office":"대륭","address":"N18","row":17,"col":13,"text":"이재민","key":"이재민"},{"tab":"daerung","office":"대륭","address":"P18","row":17,"col":15,"text":"손동욱","key":"손동욱"},{"tab":"daerung","office":"대륭","address":"T18","row":17,"col":19,"text":"박미현A","key":"박미현a"},{"tab":"daerung","office":"대륭","address":"U18","row":17,"col":20,"text":"이한슬","key":"이한슬"},{"tab":"daerung","office":"대륭","address":"W18","row":17,"col":22,"text":"이찬호","key":"이찬호"},{"tab":"daerung","office":"대륭","address":"X18","row":17,"col":23,"text":"이지윤","key":"이지윤"},{"tab":"daerung","office":"대륭","address":"AB18","row":17,"col":27,"text":"문재웅","key":"문재웅"},{"tab":"daerung","office":"대륭","address":"BB18","row":17,"col":53,"text":"신왕섭","key":"신왕섭"},{"tab":"daerung","office":"대륭","address":"BC18","row":17,"col":54,"text":"노현주","key":"노현주"},{"tab":"daerung","office":"대륭","address":"BG18","row":17,"col":58,"text":"김수정E","key":"김수정e"},{"tab":"daerung","office":"대륭","address":"BH18","row":17,"col":59,"text":"배희진","key":"배희진"},{"tab":"daerung","office":"대륭","address":"BJ18","row":17,"col":61,"text":"이대현","key":"이대현"},{"tab":"daerung","office":"대륭","address":"BP18","row":17,"col":67,"text":"안진현","key":"안진현"},{"tab":"daerung","office":"대륭","address":"BT18","row":17,"col":71,"text":"원현아","key":"원현아"},{"tab":"daerung","office":"대륭","address":"BU18","row":17,"col":72,"text":"김지나","key":"김지나"},{"tab":"daerung","office":"대륭","address":"F21","row":20,"col":5,"text":"허재","key":"허재"},{"tab":"daerung","office":"대륭","address":"G21","row":20,"col":6,"text":"김희정","key":"김희정"},{"tab":"daerung","office":"대륭","address":"I21","row":20,"col":8,"text":"유언수","key":"유언수"},{"tab":"daerung","office":"대륭","address":"M21","row":20,"col":12,"text":"이원용","key":"이원용"},{"tab":"daerung","office":"대륭","address":"N21","row":20,"col":13,"text":"유지현","key":"유지현"},{"tab":"daerung","office":"대륭","address":"P21","row":20,"col":15,"text":"오연택","key":"오연택"},{"tab":"daerung","office":"대륭","address":"Q21","row":20,"col":16,"text":"하장훈","key":"하장훈"},{"tab":"daerung","office":"대륭","address":"U21","row":20,"col":20,"text":"박수민","key":"박수민"},{"tab":"daerung","office":"대륭","address":"W21","row":20,"col":22,"text":"손광현","key":"손광현"},{"tab":"daerung","office":"대륭","address":"AB21","row":20,"col":27,"text":"김다영","key":"김다영"},{"tab":"daerung","office":"대륭","address":"BB21","row":20,"col":53,"text":"정다운","key":"정다운"},{"tab":"daerung","office":"대륭","address":"BC21","row":20,"col":54,"text":"이미연","key":"이미연"},{"tab":"daerung","office":"대륭","address":"BG21","row":20,"col":58,"text":"전재홍","key":"전재홍"},{"tab":"daerung","office":"대륭","address":"BH21","row":20,"col":59,"text":"강기석","key":"강기석"},{"tab":"daerung","office":"대륭","address":"BJ21","row":20,"col":61,"text":"김민기","key":"김민기"},{"tab":"daerung","office":"대륭","address":"BP21","row":20,"col":67,"text":"최인호","key":"최인호"},{"tab":"daerung","office":"대륭","address":"BT21","row":20,"col":71,"text":"최승일","key":"최승일"},{"tab":"daerung","office":"대륭","address":"BU21","row":20,"col":72,"text":"한혜영","key":"한혜영"},{"tab":"daerung","office":"대륭","address":"AC22","row":21,"col":28,"text":"B801","key":"b801"},{"tab":"daerung","office":"대륭","address":"AG22","row":21,"col":32,"text":"B601","key":"b601"},{"tab":"daerung","office":"대륭","address":"G24","row":23,"col":6,"text":"김형준","key":"김형준"},{"tab":"daerung","office":"대륭","address":"I24","row":23,"col":8,"text":"이준희","key":"이준희"},{"tab":"daerung","office":"대륭","address":"N24","row":23,"col":13,"text":"손정현","key":"손정현"},{"tab":"daerung","office":"대륭","address":"P24","row":23,"col":15,"text":"김성우","key":"김성우"},{"tab":"daerung","office":"대륭","address":"U24","row":23,"col":20,"text":"장민규","key":"장민규"},{"tab":"daerung","office":"대륭","address":"W24","row":23,"col":22,"text":"이민수","key":"이민수"},{"tab":"daerung","office":"대륭","address":"AB24","row":23,"col":27,"text":"김건희","key":"김건희"},{"tab":"daerung","office":"대륭","address":"BC24","row":23,"col":54,"text":"이성준","key":"이성준"},{"tab":"daerung","office":"대륭","address":"BG24","row":23,"col":58,"text":"김태욱","key":"김태욱"},{"tab":"daerung","office":"대륭","address":"BH24","row":23,"col":59,"text":"방호진","key":"방호진"},{"tab":"daerung","office":"대륭","address":"BJ24","row":23,"col":61,"text":"박건우","key":"박건우"},{"tab":"daerung","office":"대륭","address":"BO24","row":23,"col":66,"text":"신유진","key":"신유진"},{"tab":"daerung","office":"대륭","address":"BP24","row":23,"col":67,"text":"김지영D","key":"김지영d"},{"tab":"daerung","office":"대륭","address":"BT24","row":23,"col":71,"text":"박연우","key":"박연우"},{"tab":"daerung","office":"대륭","address":"BU24","row":23,"col":72,"text":"김수지","key":"김수지"},{"tab":"daerung","office":"대륭","address":"AB27","row":26,"col":27,"text":"츨입문","key":"츨입문"},{"tab":"daerung","office":"대륭","address":"BA27","row":26,"col":52,"text":"츨입문","key":"츨입문"},{"tab":"daerung","office":"대륭","address":"M28","row":27,"col":12,"text":"자동차개발팀","key":"자동차개발팀"},{"tab":"daerung","office":"대륭","address":"B29","row":28,"col":1,"text":"부문대표실","key":"부문대표실"},{"tab":"daerung","office":"대륭","address":"F29","row":28,"col":5,"text":"정희용","key":"정희용"},{"tab":"daerung","office":"대륭","address":"J29","row":28,"col":9,"text":"김규완","key":"김규완"},{"tab":"daerung","office":"대륭","address":"K29","row":28,"col":10,"text":"김채현","key":"김채현"},{"tab":"daerung","office":"대륭","address":"M29","row":28,"col":12,"text":"정철의","key":"정철의"},{"tab":"daerung","office":"대륭","address":"AC30","row":29,"col":28,"text":"1인 화상 회의실","key":"1인 화상 회의실"},{"tab":"daerung","office":"대륭","address":"U31","row":30,"col":20,"text":"B802","key":"b802"},{"tab":"daerung","office":"대륭","address":"Y31","row":30,"col":24,"text":"B401","key":"b401"},{"tab":"daerung","office":"대륭","address":"AC31","row":30,"col":28,"text":"G","key":"g"},{"tab":"daerung","office":"대륭","address":"AD31","row":30,"col":29,"text":"F","key":"f"},{"tab":"daerung","office":"대륭","address":"AE31","row":30,"col":30,"text":"E","key":"e"},{"tab":"daerung","office":"대륭","address":"AF31","row":30,"col":31,"text":"D","key":"d"},{"tab":"daerung","office":"대륭","address":"AG31","row":30,"col":32,"text":"C","key":"c"},{"tab":"daerung","office":"대륭","address":"AH31","row":30,"col":33,"text":"B","key":"b"},{"tab":"daerung","office":"대륭","address":"AI31","row":30,"col":34,"text":"A","key":"a"},{"tab":"daerung","office":"대륭","address":"AW31","row":30,"col":48,"text":"메일룸","key":"메일룸"},{"tab":"daerung","office":"대륭","address":"BM31","row":30,"col":64,"text":"C801","key":"c801"},{"tab":"daerung","office":"대륭","address":"BR31","row":30,"col":69,"text":"C802","key":"c802"},{"tab":"daerung","office":"대륭","address":"F32","row":31,"col":5,"text":"김용준","key":"김용준"},{"tab":"daerung","office":"대륭","address":"M32","row":31,"col":12,"text":"이혜량","key":"이혜량"},{"tab":"daerung","office":"대륭","address":"N35","row":34,"col":13,"text":"출입문","key":"출입문"},{"tab":"daerung","office":"대륭","address":"AR35","row":34,"col":43,"text":"출입문","key":"출입문"},{"tab":"daerung","office":"대륭","address":"D38","row":37,"col":3,"text":"남자화장실 / 치카룸","key":"남자화장실 / 치카룸"},{"tab":"daerung","office":"대륭","address":"S38","row":37,"col":18,"text":"비상용 엘리베이터 B","key":"비상용 엘리베이터 b"},{"tab":"daerung","office":"대륭","address":"AC38","row":37,"col":28,"text":"비상용 엘리베이터 A","key":"비상용 엘리베이터 a"},{"tab":"daerung","office":"대륭","address":"AW38","row":37,"col":48,"text":"엘리베이터A","key":"엘리베이터a"},{"tab":"daerung","office":"대륭","address":"BO38","row":37,"col":66,"text":"화물 엘리베이터","key":"화물 엘리베이터"},{"tab":"daerung","office":"대륭","address":"D41","row":40,"col":3,"text":"여자화장실 / 치카룸","key":"여자화장실 / 치카룸"},{"tab":"daerung","office":"대륭","address":"AI41","row":40,"col":34,"text":"남자화장실","key":"남자화장실"},{"tab":"daerung","office":"대륭","address":"AW41","row":40,"col":48,"text":"엘리베이터B","key":"엘리베이터b"},{"tab":"daerung","office":"대륭","address":"BC41","row":40,"col":54,"text":"여자화장실","key":"여자화장실"},{"tab":"daerung","office":"대륭","address":"K46","row":45,"col":10,"text":"출입문","key":"출입문"},{"tab":"daerung","office":"대륭","address":"T46","row":45,"col":19,"text":"출입문","key":"출입문"},{"tab":"daerung","office":"대륭","address":"Y46","row":45,"col":24,"text":"A602","key":"a602"},{"tab":"daerung","office":"대륭","address":"AD46","row":45,"col":29,"text":"A401","key":"a401"},{"tab":"daerung","office":"대륭","address":"AF46","row":45,"col":31,"text":"A601","key":"a601"},{"tab":"daerung","office":"대륭","address":"AJ46","row":45,"col":35,"text":"미니라운지","key":"미니라운지"},{"tab":"daerung","office":"대륭","address":"AR46","row":45,"col":43,"text":"출입문","key":"출입문"},{"tab":"daerung","office":"대륭","address":"AW46","row":45,"col":48,"text":"GA창고","key":"ga창고"},{"tab":"daerung","office":"대륭","address":"AZ46","row":45,"col":51,"text":"프로젝트룸","key":"프로젝트룸"},{"tab":"daerung","office":"대륭","address":"BD46","row":45,"col":55,"text":"임원실","key":"임원실"},{"tab":"daerung","office":"대륭","address":"BI46","row":45,"col":60,"text":"임원실","key":"임원실"},{"tab":"daerung","office":"대륭","address":"BM46","row":45,"col":64,"text":"A603","key":"a603"},{"tab":"daerung","office":"대륭","address":"BR46","row":45,"col":69,"text":"A801","key":"a801"},{"tab":"daerung","office":"대륭","address":"E48","row":47,"col":4,"text":"스윗트래커","key":"스윗트래커"},{"tab":"daerung","office":"대륭","address":"E50","row":49,"col":4,"text":"서비스 플랫폼팀","key":"서비스 플랫폼팀"},{"tab":"daerung","office":"대륭","address":"H50","row":49,"col":7,"text":"메시지 플랫폼팀","key":"메시지 플랫폼팀"},{"tab":"daerung","office":"대륭","address":"K50","row":49,"col":10,"text":"서비스 기획팀","key":"서비스 기획팀"},{"tab":"daerung","office":"대륭","address":"AH50","row":49,"col":33,"text":"커넥트웨이브 HQ","key":"커넥트웨이브 hq"},{"tab":"daerung","office":"대륭","address":"D51","row":50,"col":3,"text":"Rnd팀","key":"rnd팀"},{"tab":"daerung","office":"대륭","address":"E51","row":50,"col":4,"text":"강규민","key":"강규민"},{"tab":"daerung","office":"대륭","address":"F51","row":50,"col":5,"text":"김상중","key":"김상중"},{"tab":"daerung","office":"대륭","address":"H51","row":50,"col":7,"text":"박선양","key":"박선양"},{"tab":"daerung","office":"대륭","address":"I51","row":50,"col":8,"text":"한태경","key":"한태경"},{"tab":"daerung","office":"대륭","address":"J51","row":50,"col":9,"text":"Fe팀","key":"fe팀"},{"tab":"daerung","office":"대륭","address":"L51","row":50,"col":11,"text":"이지선","key":"이지선"},{"tab":"daerung","office":"대륭","address":"M51","row":50,"col":12,"text":"영업팀","key":"영업팀"},{"tab":"daerung","office":"대륭","address":"T52","row":51,"col":19,"text":"법무팀","key":"법무팀"},{"tab":"daerung","office":"대륭","address":"W52","row":51,"col":22,"text":"시스템실","key":"시스템실"},{"tab":"daerung","office":"대륭","address":"AB52","row":51,"col":27,"text":"CISO, 보안팀","key":"ciso, 보안팀"},{"tab":"daerung","office":"대륭","address":"AK52","row":51,"col":36,"text":"재무 1팀","key":"재무 1팀"},{"tab":"daerung","office":"대륭","address":"AR52","row":51,"col":43,"text":"재무 3팀","key":"재무 3팀"},{"tab":"daerung","office":"대륭","address":"AU52","row":51,"col":46,"text":"재무 2팀","key":"재무 2팀"},{"tab":"daerung","office":"대륭","address":"AZ52","row":51,"col":51,"text":"GA팀","key":"ga팀"},{"tab":"daerung","office":"대륭","address":"BH52","row":51,"col":59,"text":"채용팀","key":"채용팀"},{"tab":"daerung","office":"대륭","address":"BK52","row":51,"col":62,"text":"HRBP팀","key":"hrbp팀"},{"tab":"daerung","office":"대륭","address":"W53","row":52,"col":22,"text":"오재영","key":"오재영"},{"tab":"daerung","office":"대륭","address":"AB53","row":52,"col":27,"text":"조현치","key":"조현치"},{"tab":"daerung","office":"대륭","address":"AM53","row":52,"col":38,"text":"김승훈","key":"김승훈"},{"tab":"daerung","office":"대륭","address":"AR53","row":52,"col":43,"text":"이지원","key":"이지원"},{"tab":"daerung","office":"대륭","address":"AS53","row":52,"col":44,"text":"조은영B","key":"조은영b"},{"tab":"daerung","office":"대륭","address":"AU53","row":52,"col":46,"text":"이은수","key":"이은수"},{"tab":"daerung","office":"대륭","address":"AZ53","row":52,"col":51,"text":"정아름","key":"정아름"},{"tab":"daerung","office":"대륭","address":"BA53","row":52,"col":52,"text":"이건석","key":"이건석"},{"tab":"daerung","office":"대륭","address":"BC53","row":52,"col":54,"text":"정태수","key":"정태수"},{"tab":"daerung","office":"대륭","address":"BH53","row":52,"col":59,"text":"김윤석","key":"김윤석"},{"tab":"daerung","office":"대륭","address":"BI53","row":52,"col":60,"text":"유하연","key":"유하연"},{"tab":"daerung","office":"대륭","address":"BK53","row":52,"col":62,"text":"윤유리","key":"윤유리"},{"tab":"daerung","office":"대륭","address":"BL53","row":52,"col":63,"text":"신하늬","key":"신하늬"},{"tab":"daerung","office":"대륭","address":"E54","row":53,"col":4,"text":"최승빈","key":"최승빈"},{"tab":"daerung","office":"대륭","address":"F54","row":53,"col":5,"text":"김수현","key":"김수현"},{"tab":"daerung","office":"대륭","address":"H54","row":53,"col":7,"text":"임효섭","key":"임효섭"},{"tab":"daerung","office":"대륭","address":"I54","row":53,"col":8,"text":"차영빈","key":"차영빈"},{"tab":"daerung","office":"대륭","address":"K54","row":53,"col":10,"text":"정희숙","key":"정희숙"},{"tab":"daerung","office":"대륭","address":"BN54","row":53,"col":65,"text":"송유건","key":"송유건"},{"tab":"daerung","office":"대륭","address":"BR54","row":53,"col":69,"text":"탕비실","key":"탕비실"},{"tab":"daerung","office":"대륭","address":"T56","row":55,"col":19,"text":"김현중","key":"김현중"},{"tab":"daerung","office":"대륭","address":"W56","row":55,"col":22,"text":"이강수","key":"이강수"},{"tab":"daerung","office":"대륭","address":"X56","row":55,"col":23,"text":"김원석","key":"김원석"},{"tab":"daerung","office":"대륭","address":"AC56","row":55,"col":28,"text":"송설연","key":"송설연"},{"tab":"daerung","office":"대륭","address":"AK56","row":55,"col":36,"text":"강한성","key":"강한성"},{"tab":"daerung","office":"대륭","address":"AM56","row":55,"col":38,"text":"이효림","key":"이효림"},{"tab":"daerung","office":"대륭","address":"AR56","row":55,"col":43,"text":"윤혜연","key":"윤혜연"},{"tab":"daerung","office":"대륭","address":"AS56","row":55,"col":44,"text":"장민지","key":"장민지"},{"tab":"daerung","office":"대륭","address":"AU56","row":55,"col":46,"text":"조은솔","key":"조은솔"},{"tab":"daerung","office":"대륭","address":"AZ56","row":55,"col":51,"text":"유종훈","key":"유종훈"},{"tab":"daerung","office":"대륭","address":"BA56","row":55,"col":52,"text":"김태오","key":"김태오"},{"tab":"daerung","office":"대륭","address":"BH56","row":55,"col":59,"text":"김나현B","key":"김나현b"},{"tab":"daerung","office":"대륭","address":"BK56","row":55,"col":62,"text":"손희성","key":"손희성"},{"tab":"daerung","office":"대륭","address":"BL56","row":55,"col":63,"text":"박혜연","key":"박혜연"},{"tab":"daerung","office":"대륭","address":"E57","row":56,"col":4,"text":"김영균","key":"김영균"},{"tab":"daerung","office":"대륭","address":"F57","row":56,"col":5,"text":"황유정","key":"황유정"},{"tab":"daerung","office":"대륭","address":"H57","row":56,"col":7,"text":"정원준","key":"정원준"},{"tab":"daerung","office":"대륭","address":"I57","row":56,"col":8,"text":"김미송","key":"김미송"},{"tab":"daerung","office":"대륭","address":"K57","row":56,"col":10,"text":"강다현","key":"강다현"},{"tab":"daerung","office":"대륭","address":"L57","row":56,"col":11,"text":"이진혁","key":"이진혁"},{"tab":"daerung","office":"대륭","address":"BN57","row":56,"col":65,"text":"김희진","key":"김희진"},{"tab":"daerung","office":"대륭","address":"T59","row":58,"col":19,"text":"정지훈","key":"정지훈"},{"tab":"daerung","office":"대륭","address":"W59","row":58,"col":22,"text":"안성민","key":"안성민"},{"tab":"daerung","office":"대륭","address":"X59","row":58,"col":23,"text":"배성민","key":"배성민"},{"tab":"daerung","office":"대륭","address":"AB59","row":58,"col":27,"text":"김민주G","key":"김민주g"},{"tab":"daerung","office":"대륭","address":"AC59","row":58,"col":28,"text":"유영근","key":"유영근"},{"tab":"daerung","office":"대륭","address":"AK59","row":58,"col":36,"text":"이세라","key":"이세라"},{"tab":"daerung","office":"대륭","address":"AM59","row":58,"col":38,"text":"김현희","key":"김현희"},{"tab":"daerung","office":"대륭","address":"AS59","row":58,"col":44,"text":"조겨래","key":"조겨래"},{"tab":"daerung","office":"대륭","address":"AU59","row":58,"col":46,"text":"유근혜","key":"유근혜"},{"tab":"daerung","office":"대륭","address":"AZ59","row":58,"col":51,"text":"박진","key":"박진"},{"tab":"daerung","office":"대륭","address":"BA59","row":58,"col":52,"text":"여인수","key":"여인수"},{"tab":"daerung","office":"대륭","address":"BH59","row":58,"col":59,"text":"노혜진","key":"노혜진"},{"tab":"daerung","office":"대륭","address":"BI59","row":58,"col":60,"text":"한아름","key":"한아름"},{"tab":"daerung","office":"대륭","address":"BK59","row":58,"col":62,"text":"최예나","key":"최예나"},{"tab":"daerung","office":"대륭","address":"BL59","row":58,"col":63,"text":"이혜린","key":"이혜린"},{"tab":"daerung","office":"대륭","address":"BR59","row":58,"col":69,"text":"총괄대표실","key":"총괄대표실"},{"tab":"daerung","office":"대륭","address":"E60","row":59,"col":4,"text":"이준호","key":"이준호"},{"tab":"daerung","office":"대륭","address":"H60","row":59,"col":7,"text":"조래한","key":"조래한"},{"tab":"daerung","office":"대륭","address":"I60","row":59,"col":8,"text":"정인호","key":"정인호"},{"tab":"daerung","office":"대륭","address":"K60","row":59,"col":10,"text":"박종선A","key":"박종선a"},{"tab":"daerung","office":"대륭","address":"L60","row":59,"col":11,"text":"김영삼","key":"김영삼"},{"tab":"daerung","office":"대륭","address":"BN60","row":59,"col":65,"text":"김고은","key":"김고은"},{"tab":"daerung","office":"대륭","address":"AB62","row":61,"col":27,"text":"이승연","key":"이승연"},{"tab":"daerung","office":"대륭","address":"AC62","row":61,"col":28,"text":"김요한","key":"김요한"},{"tab":"daerung","office":"대륭","address":"BL62","row":61,"col":63,"text":"HRM팀","key":"hrm팀"},{"tab":"daerung","office":"대륭","address":"H63","row":62,"col":7,"text":"이을진","key":"이을진"},{"tab":"daerung","office":"대륭","address":"K63","row":62,"col":10,"text":"장영남","key":"장영남"},{"tab":"daerung","office":"대륭","address":"BN63","row":62,"col":65,"text":"전현주","key":"전현주"},{"tab":"daerung","office":"대륭","address":"T64","row":63,"col":19,"text":"최은지","key":"최은지"},{"tab":"daerung","office":"대륭","address":"W64","row":63,"col":22,"text":"이종서","key":"이종서"},{"tab":"daerung","office":"대륭","address":"X64","row":63,"col":23,"text":"송아름","key":"송아름"},{"tab":"daerung","office":"대륭","address":"AK64","row":63,"col":36,"text":"이상호A","key":"이상호a"},{"tab":"daerung","office":"대륭","address":"AM64","row":63,"col":38,"text":"최지희","key":"최지희"},{"tab":"daerung","office":"대륭","address":"AR64","row":63,"col":43,"text":"이진희","key":"이진희"},{"tab":"daerung","office":"대륭","address":"AU64","row":63,"col":46,"text":"이선희","key":"이선희"},{"tab":"daerung","office":"대륭","address":"AV64","row":63,"col":47,"text":"최지수","key":"최지수"},{"tab":"daerung","office":"대륭","address":"BA64","row":63,"col":52,"text":"하용운","key":"하용운"},{"tab":"daerung","office":"대륭","address":"BD64","row":63,"col":55,"text":"정민경","key":"정민경"},{"tab":"daerung","office":"대륭","address":"BH64","row":63,"col":59,"text":"이상호B","key":"이상호b"},{"tab":"daerung","office":"대륭","address":"BL64","row":63,"col":63,"text":"김보결","key":"김보결"},{"tab":"daerung","office":"대륭","address":"AB65","row":64,"col":27,"text":"김응진","key":"김응진"},{"tab":"daerung","office":"대륭","address":"AC65","row":64,"col":28,"text":"이세호","key":"이세호"},{"tab":"daerung","office":"대륭","address":"B66","row":65,"col":1,"text":"회의실","key":"회의실"},{"tab":"daerung","office":"대륭","address":"I66","row":65,"col":8,"text":"부문대표실","key":"부문대표실"},{"tab":"daerung","office":"대륭","address":"T67","row":66,"col":19,"text":"권소미","key":"권소미"},{"tab":"daerung","office":"대륭","address":"U67","row":66,"col":20,"text":"박용준","key":"박용준"},{"tab":"daerung","office":"대륭","address":"W67","row":66,"col":22,"text":"전재규","key":"전재규"},{"tab":"daerung","office":"대륭","address":"X67","row":66,"col":23,"text":"김연식","key":"김연식"},{"tab":"daerung","office":"대륭","address":"AK67","row":66,"col":36,"text":"장종근","key":"장종근"},{"tab":"daerung","office":"대륭","address":"AM67","row":66,"col":38,"text":"김금명","key":"김금명"},{"tab":"daerung","office":"대륭","address":"AN67","row":66,"col":39,"text":"고영우","key":"고영우"},{"tab":"daerung","office":"대륭","address":"AR67","row":66,"col":43,"text":"김유진","key":"김유진"},{"tab":"daerung","office":"대륭","address":"AU67","row":66,"col":46,"text":"이숙희","key":"이숙희"},{"tab":"daerung","office":"대륭","address":"AV67","row":66,"col":47,"text":"김지용B","key":"김지용b"},{"tab":"daerung","office":"대륭","address":"AZ67","row":66,"col":51,"text":"이다현","key":"이다현"},{"tab":"daerung","office":"대륭","address":"BA67","row":66,"col":52,"text":"신기동","key":"신기동"},{"tab":"daerung","office":"대륭","address":"BC67","row":66,"col":54,"text":"김진국","key":"김진국"},{"tab":"daerung","office":"대륭","address":"BK67","row":66,"col":62,"text":"김지은D","key":"김지은d"},{"tab":"daerung","office":"대륭","address":"BL67","row":66,"col":63,"text":"이만재","key":"이만재"},{"tab":"daerung","office":"대륭","address":"AB68","row":67,"col":27,"text":"김민구","key":"김민구"},{"tab":"daerung","office":"대륭","address":"T70","row":69,"col":19,"text":"정상훈","key":"정상훈"},{"tab":"daerung","office":"대륭","address":"W70","row":69,"col":22,"text":"김홍철","key":"김홍철"},{"tab":"daerung","office":"대륭","address":"AM70","row":69,"col":38,"text":"박성민A","key":"박성민a"},{"tab":"daerung","office":"대륭","address":"AU70","row":69,"col":46,"text":"권나현","key":"권나현"},{"tab":"daerung","office":"대륭","address":"BH70","row":69,"col":59,"text":"안민호","key":"안민호"},{"tab":"daerung","office":"대륭","address":"BK70","row":69,"col":62,"text":"김윤구","key":"김윤구"},{"tab":"daerung","office":"대륭","address":"AZ71","row":70,"col":51,"text":"홍보팀","key":"홍보팀"},{"tab":"daerung","office":"대륭","address":"BH71","row":70,"col":59,"text":"CEO Office","key":"ceo office"},{"tab":"woorim","office":"우림","address":"G2","row":1,"col":6,"text":"박성호","key":"박성호"},{"tab":"woorim","office":"우림","address":"H2","row":1,"col":7,"text":"배우리","key":"배우리"},{"tab":"woorim","office":"우림","address":"J2","row":1,"col":9,"text":"황형순","key":"황형순"},{"tab":"woorim","office":"우림","address":"N2","row":1,"col":13,"text":"장선의","key":"장선의"},{"tab":"woorim","office":"우림","address":"S2","row":1,"col":18,"text":"Function Romm","key":"function romm"},{"tab":"woorim","office":"우림","address":"AG4","row":3,"col":32,"text":"박상수","key":"박상수"},{"tab":"woorim","office":"우림","address":"AM4","row":3,"col":38,"text":"권순석","key":"권순석"},{"tab":"woorim","office":"우림","address":"G5","row":4,"col":6,"text":"조성은","key":"조성은"},{"tab":"woorim","office":"우림","address":"H5","row":4,"col":7,"text":"정혜선","key":"정혜선"},{"tab":"woorim","office":"우림","address":"J5","row":4,"col":9,"text":"박진영","key":"박진영"},{"tab":"woorim","office":"우림","address":"N5","row":4,"col":13,"text":"정보배","key":"정보배"},{"tab":"woorim","office":"우림","address":"P5","row":4,"col":15,"text":"이소영A","key":"이소영a"},{"tab":"woorim","office":"우림","address":"BA5","row":4,"col":52,"text":"정초연","key":"정초연"},{"tab":"woorim","office":"우림","address":"BJ5","row":4,"col":61,"text":"Search Platform팀","key":"search platform팀"},{"tab":"woorim","office":"우림","address":"BR5","row":4,"col":69,"text":"유성종","key":"유성종"},{"tab":"woorim","office":"우림","address":"CC5","row":4,"col":80,"text":"Sell팀","key":"sell팀"},{"tab":"woorim","office":"우림","address":"CK5","row":4,"col":88,"text":"Billing팀","key":"billing팀"},{"tab":"woorim","office":"우림","address":"AG6","row":5,"col":32,"text":"홍혜진","key":"홍혜진"},{"tab":"woorim","office":"우림","address":"AH6","row":5,"col":33,"text":"홍진호","key":"홍진호"},{"tab":"woorim","office":"우림","address":"AJ6","row":5,"col":35,"text":"백동렬","key":"백동렬"},{"tab":"woorim","office":"우림","address":"AK6","row":5,"col":36,"text":"윤동환","key":"윤동환"},{"tab":"woorim","office":"우림","address":"AM6","row":5,"col":38,"text":"김종화","key":"김종화"},{"tab":"woorim","office":"우림","address":"AN6","row":5,"col":39,"text":"김인나","key":"김인나"},{"tab":"woorim","office":"우림","address":"AP6","row":5,"col":41,"text":"성상미","key":"성상미"},{"tab":"woorim","office":"우림","address":"AQ6","row":5,"col":42,"text":"이정헌","key":"이정헌"},{"tab":"woorim","office":"우림","address":"BA6","row":5,"col":52,"text":"김미지","key":"김미지"},{"tab":"woorim","office":"우림","address":"BD6","row":5,"col":55,"text":"이인환","key":"이인환"},{"tab":"woorim","office":"우림","address":"BJ6","row":5,"col":61,"text":"조유진","key":"조유진"},{"tab":"woorim","office":"우림","address":"BM6","row":5,"col":64,"text":"박주희","key":"박주희"},{"tab":"woorim","office":"우림","address":"BR6","row":5,"col":69,"text":"이신영","key":"이신영"},{"tab":"woorim","office":"우림","address":"BU6","row":5,"col":72,"text":"정인환","key":"정인환"},{"tab":"woorim","office":"우림","address":"BZ6","row":5,"col":77,"text":"정미영","key":"정미영"},{"tab":"woorim","office":"우림","address":"CC6","row":5,"col":80,"text":"김지은C","key":"김지은c"},{"tab":"woorim","office":"우림","address":"CF6","row":5,"col":83,"text":"서은지","key":"서은지"},{"tab":"woorim","office":"우림","address":"BR7","row":6,"col":69,"text":"NextTF팀","key":"nexttf팀"},{"tab":"woorim","office":"우림","address":"BU7","row":6,"col":72,"text":"강가람","key":"강가람"},{"tab":"woorim","office":"우림","address":"BZ7","row":6,"col":77,"text":"한대희","key":"한대희"},{"tab":"woorim","office":"우림","address":"CC7","row":6,"col":80,"text":"정준오","key":"정준오"},{"tab":"woorim","office":"우림","address":"CF7","row":6,"col":83,"text":"박서연","key":"박서연"},{"tab":"woorim","office":"우림","address":"CN7","row":6,"col":91,"text":"유혜진","key":"유혜진"},{"tab":"woorim","office":"우림","address":"G8","row":7,"col":6,"text":"기획2팀","key":"기획2팀"},{"tab":"woorim","office":"우림","address":"N8","row":7,"col":13,"text":"UI개발실","key":"ui개발실"},{"tab":"woorim","office":"우림","address":"AG9","row":8,"col":32,"text":"정희찬","key":"정희찬"},{"tab":"woorim","office":"우림","address":"AH9","row":8,"col":33,"text":"남경호","key":"남경호"},{"tab":"woorim","office":"우림","address":"AJ9","row":8,"col":35,"text":"장유진","key":"장유진"},{"tab":"woorim","office":"우림","address":"AK9","row":8,"col":36,"text":"송승훈","key":"송승훈"},{"tab":"woorim","office":"우림","address":"AM9","row":8,"col":38,"text":"박승모","key":"박승모"},{"tab":"woorim","office":"우림","address":"AN9","row":8,"col":39,"text":"이기봉","key":"이기봉"},{"tab":"woorim","office":"우림","address":"AP9","row":8,"col":41,"text":"나윤아","key":"나윤아"},{"tab":"woorim","office":"우림","address":"AQ9","row":8,"col":42,"text":"나은정","key":"나은정"},{"tab":"woorim","office":"우림","address":"D10","row":9,"col":3,"text":"기획1팀","key":"기획1팀"},{"tab":"woorim","office":"우림","address":"K10","row":9,"col":10,"text":"글로벌커머스","key":"글로벌커머스"},{"tab":"woorim","office":"우림","address":"E11","row":10,"col":4,"text":"선철수","key":"선철수"},{"tab":"woorim","office":"우림","address":"G11","row":10,"col":6,"text":"김현숙","key":"김현숙"},{"tab":"woorim","office":"우림","address":"H11","row":10,"col":7,"text":"임동호","key":"임동호"},{"tab":"woorim","office":"우림","address":"J11","row":10,"col":9,"text":"박종선B","key":"박종선b"},{"tab":"woorim","office":"우림","address":"K11","row":10,"col":10,"text":"이한미","key":"이한미"},{"tab":"woorim","office":"우림","address":"M11","row":10,"col":12,"text":"이현지","key":"이현지"},{"tab":"woorim","office":"우림","address":"N11","row":10,"col":13,"text":"이혜수","key":"이혜수"},{"tab":"woorim","office":"우림","address":"P11","row":10,"col":15,"text":"홍가을","key":"홍가을"},{"tab":"woorim","office":"우림","address":"AZ11","row":10,"col":51,"text":"Member팀","key":"member팀"},{"tab":"woorim","office":"우림","address":"BJ11","row":10,"col":61,"text":"Data팀","key":"data팀"},{"tab":"woorim","office":"우림","address":"BR11","row":10,"col":69,"text":"Search Platform팀","key":"search platform팀"},{"tab":"woorim","office":"우림","address":"CC11","row":10,"col":80,"text":"Sell팀","key":"sell팀"},{"tab":"woorim","office":"우림","address":"CK11","row":10,"col":88,"text":"Billing팀","key":"billing팀"},{"tab":"woorim","office":"우림","address":"AG12","row":11,"col":32,"text":"Infra팀","key":"infra팀"},{"tab":"woorim","office":"우림","address":"AJ12","row":11,"col":35,"text":"Billing팀","key":"billing팀"},{"tab":"woorim","office":"우림","address":"AX12","row":11,"col":49,"text":"용수진","key":"용수진"},{"tab":"woorim","office":"우림","address":"BA12","row":11,"col":52,"text":"김하빈","key":"김하빈"},{"tab":"woorim","office":"우림","address":"BD12","row":11,"col":55,"text":"서한수","key":"서한수"},{"tab":"woorim","office":"우림","address":"BJ12","row":11,"col":61,"text":"이동원","key":"이동원"},{"tab":"woorim","office":"우림","address":"BM12","row":11,"col":64,"text":"김예원A","key":"김예원a"},{"tab":"woorim","office":"우림","address":"BR12","row":11,"col":69,"text":"황수비","key":"황수비"},{"tab":"woorim","office":"우림","address":"BU12","row":11,"col":72,"text":"박경수","key":"박경수"},{"tab":"woorim","office":"우림","address":"BZ12","row":11,"col":77,"text":"이강현","key":"이강현"},{"tab":"woorim","office":"우림","address":"CC12","row":11,"col":80,"text":"최지혜","key":"최지혜"},{"tab":"woorim","office":"우림","address":"CF12","row":11,"col":83,"text":"박효철","key":"박효철"},{"tab":"woorim","office":"우림","address":"CK12","row":11,"col":88,"text":"최나영","key":"최나영"},{"tab":"woorim","office":"우림","address":"CN12","row":11,"col":91,"text":"심재진","key":"심재진"},{"tab":"woorim","office":"우림","address":"AF13","row":12,"col":31,"text":"DB팀","key":"db팀"},{"tab":"woorim","office":"우림","address":"AP13","row":12,"col":41,"text":"Item팀","key":"item팀"},{"tab":"woorim","office":"우림","address":"AU13","row":12,"col":46,"text":"문희","key":"문희"},{"tab":"woorim","office":"우림","address":"AX13","row":12,"col":49,"text":"양자경","key":"양자경"},{"tab":"woorim","office":"우림","address":"BA13","row":12,"col":52,"text":"김아영","key":"김아영"},{"tab":"woorim","office":"우림","address":"BD13","row":12,"col":55,"text":"최민석","key":"최민석"},{"tab":"woorim","office":"우림","address":"BJ13","row":12,"col":61,"text":"이혜란","key":"이혜란"},{"tab":"woorim","office":"우림","address":"BM13","row":12,"col":64,"text":"이장일","key":"이장일"},{"tab":"woorim","office":"우림","address":"BR13","row":12,"col":69,"text":"최진호","key":"최진호"},{"tab":"woorim","office":"우림","address":"BU13","row":12,"col":72,"text":"이세욱","key":"이세욱"},{"tab":"woorim","office":"우림","address":"BZ13","row":12,"col":77,"text":"강동욱","key":"강동욱"},{"tab":"woorim","office":"우림","address":"CC13","row":12,"col":80,"text":"선준우","key":"선준우"},{"tab":"woorim","office":"우림","address":"CF13","row":12,"col":83,"text":"이지혁","key":"이지혁"},{"tab":"woorim","office":"우림","address":"CK13","row":12,"col":88,"text":"정현호","key":"정현호"},{"tab":"woorim","office":"우림","address":"D14","row":13,"col":3,"text":"양미진","key":"양미진"},{"tab":"woorim","office":"우림","address":"G14","row":13,"col":6,"text":"조하영","key":"조하영"},{"tab":"woorim","office":"우림","address":"H14","row":13,"col":7,"text":"고대현","key":"고대현"},{"tab":"woorim","office":"우림","address":"J14","row":13,"col":9,"text":"박상철","key":"박상철"},{"tab":"woorim","office":"우림","address":"K14","row":13,"col":10,"text":"석민지","key":"석민지"},{"tab":"woorim","office":"우림","address":"M14","row":13,"col":12,"text":"이주희","key":"이주희"},{"tab":"woorim","office":"우림","address":"N14","row":13,"col":13,"text":"김보경","key":"김보경"},{"tab":"woorim","office":"우림","address":"P14","row":13,"col":15,"text":"임지영A","key":"임지영a"},{"tab":"woorim","office":"우림","address":"AG14","row":13,"col":32,"text":"이제헌","key":"이제헌"},{"tab":"woorim","office":"우림","address":"AH14","row":13,"col":33,"text":"오솔샘","key":"오솔샘"},{"tab":"woorim","office":"우림","address":"AJ14","row":13,"col":35,"text":"조재형B","key":"조재형b"},{"tab":"woorim","office":"우림","address":"AK14","row":13,"col":36,"text":"프린터","key":"프린터"},{"tab":"woorim","office":"우림","address":"AM14","row":13,"col":38,"text":"이정애","key":"이정애"},{"tab":"woorim","office":"우림","address":"AN14","row":13,"col":39,"text":"김지영A","key":"김지영a"},{"tab":"woorim","office":"우림","address":"AP14","row":13,"col":41,"text":"이도훈","key":"이도훈"},{"tab":"woorim","office":"우림","address":"AQ14","row":13,"col":42,"text":"김구영","key":"김구영"},{"tab":"woorim","office":"우림","address":"AZ14","row":13,"col":51,"text":"CoreTF팀","key":"coretf팀"},{"tab":"woorim","office":"우림","address":"BJ16","row":15,"col":61,"text":"탁자","key":"탁자"},{"tab":"woorim","office":"우림","address":"BR16","row":15,"col":69,"text":"프린터","key":"프린터"},{"tab":"woorim","office":"우림","address":"AG17","row":16,"col":32,"text":"표종현","key":"표종현"},{"tab":"woorim","office":"우림","address":"AH17","row":16,"col":33,"text":"정건우","key":"정건우"},{"tab":"woorim","office":"우림","address":"AI17","row":16,"col":34,"text":"AX팀","key":"ax팀"},{"tab":"woorim","office":"우림","address":"AJ17","row":16,"col":35,"text":"김태민","key":"김태민"},{"tab":"woorim","office":"우림","address":"AM17","row":16,"col":38,"text":"한가빈","key":"한가빈"},{"tab":"woorim","office":"우림","address":"AN17","row":16,"col":39,"text":"김민정D","key":"김민정d"},{"tab":"woorim","office":"우림","address":"AP17","row":16,"col":41,"text":"조재형A","key":"조재형a"},{"tab":"woorim","office":"우림","address":"N18","row":17,"col":13,"text":"품질관리팀","key":"품질관리팀"},{"tab":"woorim","office":"우림","address":"CF18","row":17,"col":83,"text":"우림오피스 라운지","key":"우림오피스 라운지"},{"tab":"woorim","office":"우림","address":"N19","row":18,"col":13,"text":"유지만","key":"유지만"},{"tab":"woorim","office":"우림","address":"P19","row":18,"col":15,"text":"김진현A","key":"김진현a"},{"tab":"woorim","office":"우림","address":"AZ19","row":18,"col":51,"text":"CoreTF팀","key":"coretf팀"},{"tab":"woorim","office":"우림","address":"BJ19","row":18,"col":61,"text":"퍼블리싱팀","key":"퍼블리싱팀"},{"tab":"woorim","office":"우림","address":"BZ19","row":18,"col":77,"text":"DB팀","key":"db팀"},{"tab":"woorim","office":"우림","address":"G20","row":19,"col":6,"text":"복사기","key":"복사기"},{"tab":"woorim","office":"우림","address":"AM20","row":19,"col":38,"text":"Data팀","key":"data팀"},{"tab":"woorim","office":"우림","address":"AU20","row":19,"col":46,"text":"이주상","key":"이주상"},{"tab":"woorim","office":"우림","address":"AX20","row":19,"col":49,"text":"임하림","key":"임하림"},{"tab":"woorim","office":"우림","address":"BA20","row":19,"col":52,"text":"한재연","key":"한재연"},{"tab":"woorim","office":"우림","address":"BD20","row":19,"col":55,"text":"박서린","key":"박서린"},{"tab":"woorim","office":"우림","address":"BM20","row":19,"col":64,"text":"이지훈","key":"이지훈"},{"tab":"woorim","office":"우림","address":"BR20","row":19,"col":69,"text":"임영민","key":"임영민"},{"tab":"woorim","office":"우림","address":"BU20","row":19,"col":72,"text":"최승일","key":"최승일"},{"tab":"woorim","office":"우림","address":"BZ20","row":19,"col":77,"text":"김은혜","key":"김은혜"},{"tab":"woorim","office":"우림","address":"CC20","row":19,"col":80,"text":"정동준","key":"정동준"},{"tab":"woorim","office":"우림","address":"C21","row":20,"col":2,"text":"사업관리팀","key":"사업관리팀"},{"tab":"woorim","office":"우림","address":"F21","row":20,"col":5,"text":"제휴비즈니스팀","key":"제휴비즈니스팀"},{"tab":"woorim","office":"우림","address":"J21","row":20,"col":9,"text":"셀피아팀","key":"셀피아팀"},{"tab":"woorim","office":"우림","address":"AG21","row":20,"col":32,"text":"이종일","key":"이종일"},{"tab":"woorim","office":"우림","address":"AH21","row":20,"col":33,"text":"이규민","key":"이규민"},{"tab":"woorim","office":"우림","address":"AJ21","row":20,"col":35,"text":"인성호","key":"인성호"},{"tab":"woorim","office":"우림","address":"AM21","row":20,"col":38,"text":"선우민","key":"선우민"},{"tab":"woorim","office":"우림","address":"AN21","row":20,"col":39,"text":"박혜성","key":"박혜성"},{"tab":"woorim","office":"우림","address":"AP21","row":20,"col":41,"text":"황현수","key":"황현수"},{"tab":"woorim","office":"우림","address":"AQ21","row":20,"col":42,"text":"이연이","key":"이연이"},{"tab":"woorim","office":"우림","address":"AX21","row":20,"col":49,"text":"오하늘","key":"오하늘"},{"tab":"woorim","office":"우림","address":"BA21","row":20,"col":52,"text":"김진현C","key":"김진현c"},{"tab":"woorim","office":"우림","address":"BD21","row":20,"col":55,"text":"김진현A","key":"김진현a"},{"tab":"woorim","office":"우림","address":"BJ21","row":20,"col":61,"text":"옥호진","key":"옥호진"},{"tab":"woorim","office":"우림","address":"BM21","row":20,"col":64,"text":"이재범","key":"이재범"},{"tab":"woorim","office":"우림","address":"BR21","row":20,"col":69,"text":"김양희","key":"김양희"},{"tab":"woorim","office":"우림","address":"BU21","row":20,"col":72,"text":"김보라A","key":"김보라a"},{"tab":"woorim","office":"우림","address":"BZ21","row":20,"col":77,"text":"성흥모","key":"성흥모"},{"tab":"woorim","office":"우림","address":"CC21","row":20,"col":80,"text":"박보람","key":"박보람"},{"tab":"woorim","office":"우림","address":"D22","row":21,"col":3,"text":"양처럼","key":"양처럼"},{"tab":"woorim","office":"우림","address":"E22","row":21,"col":4,"text":"남정은","key":"남정은"},{"tab":"woorim","office":"우림","address":"G22","row":21,"col":6,"text":"배주현","key":"배주현"},{"tab":"woorim","office":"우림","address":"H22","row":21,"col":7,"text":"전종욱","key":"전종욱"},{"tab":"woorim","office":"우림","address":"K22","row":21,"col":10,"text":"이재욱","key":"이재욱"},{"tab":"woorim","office":"우림","address":"N22","row":21,"col":13,"text":"오민선","key":"오민선"},{"tab":"woorim","office":"우림","address":"P22","row":21,"col":15,"text":"정유진B","key":"정유진b"},{"tab":"woorim","office":"우림","address":"T22","row":21,"col":19,"text":"우림오피스 라운지","key":"우림오피스 라운지"},{"tab":"woorim","office":"우림","address":"BZ23","row":22,"col":77,"text":"퍼블리싱팀","key":"퍼블리싱팀"},{"tab":"woorim","office":"우림","address":"AG24","row":23,"col":32,"text":"최정현","key":"최정현"},{"tab":"woorim","office":"우림","address":"AH24","row":23,"col":33,"text":"정광현","key":"정광현"},{"tab":"woorim","office":"우림","address":"AJ24","row":23,"col":35,"text":"최진엽","key":"최진엽"},{"tab":"woorim","office":"우림","address":"AN24","row":23,"col":39,"text":"박성우","key":"박성우"},{"tab":"woorim","office":"우림","address":"AP24","row":23,"col":41,"text":"이경훈","key":"이경훈"},{"tab":"woorim","office":"우림","address":"AQ24","row":23,"col":42,"text":"박행운","key":"박행운"},{"tab":"woorim","office":"우림","address":"BZ24","row":23,"col":77,"text":"박선호","key":"박선호"},{"tab":"woorim","office":"우림","address":"CC24","row":23,"col":80,"text":"박소은","key":"박소은"},{"tab":"woorim","office":"우림","address":"D25","row":24,"col":3,"text":"배수진","key":"배수진"},{"tab":"woorim","office":"우림","address":"E25","row":24,"col":4,"text":"윤해룡","key":"윤해룡"},{"tab":"woorim","office":"우림","address":"G25","row":24,"col":6,"text":"김연준","key":"김연준"},{"tab":"woorim","office":"우림","address":"H25","row":24,"col":7,"text":"임지민","key":"임지민"},{"tab":"woorim","office":"우림","address":"K25","row":24,"col":10,"text":"박민선","key":"박민선"},{"tab":"woorim","office":"우림","address":"M25","row":24,"col":12,"text":"송지근","key":"송지근"},{"tab":"woorim","office":"우림","address":"N25","row":24,"col":13,"text":"한지혜","key":"한지혜"},{"tab":"woorim","office":"우림","address":"P25","row":24,"col":15,"text":"이연이","key":"이연이"},{"tab":"woorim","office":"우림","address":"AX25","row":24,"col":49,"text":"품질관리팀","key":"품질관리팀"},{"tab":"woorim","office":"우림","address":"BJ25","row":24,"col":61,"text":"퍼블리싱팀","key":"퍼블리싱팀"},{"tab":"woorim","office":"우림","address":"BZ25","row":24,"col":77,"text":"원유민","key":"원유민"},{"tab":"woorim","office":"우림","address":"CC25","row":24,"col":80,"text":"김경진","key":"김경진"},{"tab":"woorim","office":"우림","address":"AU26","row":25,"col":46,"text":"유지만","key":"유지만"},{"tab":"woorim","office":"우림","address":"AX26","row":25,"col":49,"text":"오민선","key":"오민선"},{"tab":"woorim","office":"우림","address":"BA26","row":25,"col":52,"text":"정유진B","key":"정유진b"},{"tab":"woorim","office":"우림","address":"BD26","row":25,"col":55,"text":"한지혜","key":"한지혜"},{"tab":"woorim","office":"우림","address":"BJ26","row":25,"col":61,"text":"강태규","key":"강태규"},{"tab":"woorim","office":"우림","address":"BM26","row":25,"col":64,"text":"박은선","key":"박은선"},{"tab":"woorim","office":"우림","address":"BR26","row":25,"col":69,"text":"엄혜진","key":"엄혜진"},{"tab":"woorim","office":"우림","address":"S27","row":26,"col":18,"text":"츨입문","key":"츨입문"},{"tab":"woorim","office":"우림","address":"AD27","row":26,"col":29,"text":"츨입문","key":"츨입문"},{"tab":"woorim","office":"우림","address":"E28","row":27,"col":4,"text":"마케팅팀","key":"마케팅팀"},{"tab":"woorim","office":"우림","address":"E29","row":28,"col":4,"text":"박소정","key":"박소정"},{"tab":"woorim","office":"우림","address":"G29","row":28,"col":6,"text":"김지현","key":"김지현"},{"tab":"woorim","office":"우림","address":"H29","row":28,"col":7,"text":"최하영","key":"최하영"},{"tab":"woorim","office":"우림","address":"AX29","row":28,"col":49,"text":"테이블 (약품, 법인차량)","key":"테이블 (약품, 법인차량)"},{"tab":"woorim","office":"우림","address":"BC29","row":28,"col":54,"text":"창고","key":"창고"},{"tab":"woorim","office":"우림","address":"J31","row":30,"col":9,"text":"창고","key":"창고"},{"tab":"woorim","office":"우림","address":"N31","row":30,"col":13,"text":"메일룸","key":"메일룸"},{"tab":"woorim","office":"우림","address":"AM31","row":30,"col":38,"text":"출입문","key":"출입문"},{"tab":"woorim","office":"우림","address":"AP31","row":30,"col":41,"text":"회의실","key":"회의실"},{"tab":"woorim","office":"우림","address":"D32","row":31,"col":3,"text":"서수혜","key":"서수혜"},{"tab":"woorim","office":"우림","address":"E32","row":31,"col":4,"text":"신해원","key":"신해원"},{"tab":"woorim","office":"우림","address":"G32","row":31,"col":6,"text":"박혜민","key":"박혜민"},{"tab":"woorim","office":"우림","address":"H32","row":31,"col":7,"text":"이한희","key":"이한희"},{"tab":"woorim","office":"우림","address":"CC32","row":31,"col":80,"text":"김영민","key":"김영민"},{"tab":"woorim","office":"우림","address":"CE33","row":32,"col":82,"text":"출입문","key":"출입문"},{"tab":"woorim","office":"우림","address":"X35","row":34,"col":23,"text":"출입문","key":"출입문"},{"tab":"woorim","office":"우림","address":"AW35","row":34,"col":48,"text":"출입문","key":"출입문"},{"tab":"woorim","office":"우림","address":"CG35","row":34,"col":84,"text":"출입문","key":"출입문"},{"tab":"woorim","office":"우림","address":"G40","row":39,"col":6,"text":"남자화장실","key":"남자화장실"},{"tab":"woorim","office":"우림","address":"R40","row":39,"col":17,"text":"비상용 엘리베이터A","key":"비상용 엘리베이터a"},{"tab":"woorim","office":"우림","address":"AE40","row":39,"col":30,"text":"엘리베이터A","key":"엘리베이터a"},{"tab":"woorim","office":"우림","address":"BW40","row":39,"col":74,"text":"남자화장실","key":"남자화장실"},{"tab":"woorim","office":"우림","address":"CN40","row":39,"col":91,"text":"엘리베이터C","key":"엘리베이터c"},{"tab":"woorim","office":"우림","address":"G44","row":43,"col":6,"text":"여자화장실","key":"여자화장실"},{"tab":"woorim","office":"우림","address":"N44","row":43,"col":13,"text":"화물용 엘리베이터","key":"화물용 엘리베이터"},{"tab":"woorim","office":"우림","address":"AE44","row":43,"col":30,"text":"엘리베이터B","key":"엘리베이터b"},{"tab":"woorim","office":"우림","address":"BW44","row":43,"col":74,"text":"여자화장실","key":"여자화장실"},{"tab":"woorim","office":"우림","address":"CA44","row":43,"col":78,"text":"비상용 엘리베이터B","key":"비상용 엘리베이터b"},{"tab":"woorim","office":"우림","address":"CN44","row":43,"col":91,"text":"엘리베이터D","key":"엘리베이터d"},{"tab":"woorim","office":"우림","address":"U48","row":47,"col":20,"text":"몰테일","key":"몰테일"},{"tab":"woorim","office":"우림","address":"AQ48","row":47,"col":42,"text":"몰테일","key":"몰테일"},{"tab":"woorim","office":"우림","address":"X52","row":51,"col":23,"text":"출입문","key":"출입문"},{"tab":"woorim","office":"우림","address":"AQ52","row":51,"col":42,"text":"회의실","key":"회의실"},{"tab":"woorim","office":"우림","address":"AX52","row":51,"col":49,"text":"출입문","key":"출입문"},{"tab":"woorim","office":"우림","address":"AZ52","row":51,"col":51,"text":"출입문","key":"출입문"},{"tab":"woorim","office":"우림","address":"BX52","row":51,"col":75,"text":"출입문","key":"출입문"},{"tab":"woorim","office":"우림","address":"CF52","row":51,"col":83,"text":"출입문","key":"출입문"},{"tab":"woorim","office":"우림","address":"CL52","row":51,"col":89,"text":"출입문","key":"출입문"},{"tab":"woorim","office":"우림","address":"X55","row":54,"col":23,"text":"정태진","key":"정태진"},{"tab":"woorim","office":"우림","address":"Z55","row":54,"col":25,"text":"김수정C","key":"김수정c"},{"tab":"woorim","office":"우림","address":"AB55","row":54,"col":27,"text":"김정환","key":"김정환"},{"tab":"woorim","office":"우림","address":"BX55","row":54,"col":75,"text":"회의실 801","key":"회의실 801"},{"tab":"woorim","office":"우림","address":"CG55","row":54,"col":84,"text":"회의실 605","key":"회의실 605"},{"tab":"woorim","office":"우림","address":"CL55","row":54,"col":89,"text":"미니 라운지","key":"미니 라운지"},{"tab":"woorim","office":"우림","address":"BK57","row":56,"col":62,"text":"부문대표실","key":"부문대표실"},{"tab":"woorim","office":"우림","address":"V58","row":57,"col":21,"text":"플랫폼 개발실","key":"플랫폼 개발실"},{"tab":"woorim","office":"우림","address":"AA58","row":57,"col":26,"text":"버티컬 개발실","key":"버티컬 개발실"},{"tab":"woorim","office":"우림","address":"U59","row":58,"col":20,"text":"김태승","key":"김태승"},{"tab":"woorim","office":"우림","address":"W59","row":58,"col":22,"text":"김두경","key":"김두경"},{"tab":"woorim","office":"우림","address":"Y59","row":58,"col":24,"text":"차준엽","key":"차준엽"},{"tab":"woorim","office":"우림","address":"AA59","row":58,"col":26,"text":"류혜진","key":"류혜진"},{"tab":"woorim","office":"우림","address":"U61","row":60,"col":20,"text":"강초희","key":"강초희"},{"tab":"woorim","office":"우림","address":"W61","row":60,"col":22,"text":"정솔아","key":"정솔아"},{"tab":"woorim","office":"우림","address":"Y61","row":60,"col":24,"text":"김다슬","key":"김다슬"},{"tab":"woorim","office":"우림","address":"AA61","row":60,"col":26,"text":"이희숙","key":"이희숙"},{"tab":"woorim","office":"우림","address":"AQ61","row":60,"col":42,"text":"회의실","key":"회의실"},{"tab":"woorim","office":"우림","address":"X63","row":62,"col":23,"text":"운영팀","key":"운영팀"},{"tab":"woorim","office":"우림","address":"CL63","row":62,"col":89,"text":"출입문","key":"출입문"},{"tab":"woorim","office":"우림","address":"Y64","row":63,"col":24,"text":"영업기획팀","key":"영업기획팀"},{"tab":"woorim","office":"우림","address":"Y65","row":64,"col":24,"text":"최세일","key":"최세일"},{"tab":"woorim","office":"우림","address":"AA65","row":64,"col":26,"text":"최경준","key":"최경준"},{"tab":"woorim","office":"우림","address":"BO66","row":65,"col":66,"text":"이선아","key":"이선아"},{"tab":"woorim","office":"우림","address":"BR66","row":65,"col":69,"text":"이영원","key":"이영원"},{"tab":"woorim","office":"우림","address":"BY66","row":65,"col":76,"text":"이영주","key":"이영주"},{"tab":"woorim","office":"우림","address":"CB66","row":65,"col":79,"text":"임형진","key":"임형진"},{"tab":"woorim","office":"우림","address":"CH66","row":65,"col":85,"text":"김태연","key":"김태연"},{"tab":"woorim","office":"우림","address":"Y67","row":66,"col":24,"text":"차용익","key":"차용익"},{"tab":"woorim","office":"우림","address":"AA67","row":66,"col":26,"text":"복사기","key":"복사기"},{"tab":"woorim","office":"우림","address":"BO68","row":67,"col":66,"text":"이정민","key":"이정민"},{"tab":"woorim","office":"우림","address":"BR68","row":67,"col":69,"text":"김슬비","key":"김슬비"},{"tab":"woorim","office":"우림","address":"BU68","row":67,"col":72,"text":"김윤주","key":"김윤주"},{"tab":"woorim","office":"우림","address":"BY68","row":67,"col":76,"text":"최지영","key":"최지영"},{"tab":"woorim","office":"우림","address":"CB68","row":67,"col":79,"text":"박범수","key":"박범수"},{"tab":"woorim","office":"우림","address":"CE68","row":67,"col":82,"text":"채정민","key":"채정민"},{"tab":"woorim","office":"우림","address":"W70","row":69,"col":22,"text":"플랫폼 사업실","key":"플랫폼 사업실"},{"tab":"woorim","office":"우림","address":"AQ70","row":69,"col":42,"text":"회의실","key":"회의실"},{"tab":"woorim","office":"우림","address":"U71","row":70,"col":20,"text":"강정규","key":"강정규"},{"tab":"woorim","office":"우림","address":"W71","row":70,"col":22,"text":"박정","key":"박정"},{"tab":"woorim","office":"우림","address":"Y71","row":70,"col":24,"text":"조민지","key":"조민지"},{"tab":"woorim","office":"우림","address":"BQ71","row":70,"col":68,"text":"서비스운영팀","key":"서비스운영팀"},{"tab":"woorim","office":"우림","address":"CB71","row":70,"col":79,"text":"고객지원팀","key":"고객지원팀"},{"tab":"woorim","office":"우림","address":"BO72","row":71,"col":66,"text":"이정원","key":"이정원"},{"tab":"woorim","office":"우림","address":"BR72","row":71,"col":69,"text":"서재우","key":"서재우"},{"tab":"woorim","office":"우림","address":"BU72","row":71,"col":72,"text":"임근진","key":"임근진"},{"tab":"woorim","office":"우림","address":"BY72","row":71,"col":76,"text":"이승미","key":"이승미"},{"tab":"woorim","office":"우림","address":"CB72","row":71,"col":79,"text":"박수진A","key":"박수진a"},{"tab":"woorim","office":"우림","address":"CE72","row":71,"col":82,"text":"최준범","key":"최준범"},{"tab":"woorim","office":"우림","address":"CH72","row":71,"col":85,"text":"허난슬","key":"허난슬"},{"tab":"woorim","office":"우림","address":"U73","row":72,"col":20,"text":"조성주","key":"조성주"},{"tab":"woorim","office":"우림","address":"W73","row":72,"col":22,"text":"금경호","key":"금경호"},{"tab":"woorim","office":"우림","address":"Y73","row":72,"col":24,"text":"박수빈","key":"박수빈"},{"tab":"woorim","office":"우림","address":"AA73","row":72,"col":26,"text":"박지선","key":"박지선"},{"tab":"woorim","office":"우림","address":"BO74","row":73,"col":66,"text":"양종현","key":"양종현"},{"tab":"woorim","office":"우림","address":"BR74","row":73,"col":69,"text":"이경숙","key":"이경숙"},{"tab":"woorim","office":"우림","address":"BU74","row":73,"col":72,"text":"권이지","key":"권이지"},{"tab":"woorim","office":"우림","address":"BY74","row":73,"col":76,"text":"임민용","key":"임민용"},{"tab":"woorim","office":"우림","address":"CB74","row":73,"col":79,"text":"서동진","key":"서동진"},{"tab":"woorim","office":"우림","address":"CE74","row":73,"col":82,"text":"오동준","key":"오동준"},{"tab":"woorim","office":"우림","address":"X75","row":74,"col":23,"text":"경영지원본부","key":"경영지원본부"},{"tab":"woorim","office":"우림","address":"CL76","row":75,"col":89,"text":"오픈형 창고","key":"오픈형 창고"},{"tab":"woorim","office":"우림","address":"BR77","row":76,"col":69,"text":"온보딩팀","key":"온보딩팀"},{"tab":"woorim","office":"우림","address":"CB77","row":76,"col":79,"text":"성장지원팀","key":"성장지원팀"},{"tab":"woorim","office":"우림","address":"U78","row":77,"col":20,"text":"부문대표실","key":"부문대표실"},{"tab":"woorim","office":"우림","address":"BO78","row":77,"col":66,"text":"강경아","key":"강경아"},{"tab":"woorim","office":"우림","address":"BR78","row":77,"col":69,"text":"김민지A","key":"김민지a"},{"tab":"woorim","office":"우림","address":"BY78","row":77,"col":76,"text":"이선복","key":"이선복"},{"tab":"woorim","office":"우림","address":"CB78","row":77,"col":79,"text":"김대현","key":"김대현"},{"tab":"woorim","office":"우림","address":"CE78","row":77,"col":82,"text":"최상건","key":"최상건"},{"tab":"woorim","office":"우림","address":"CH78","row":77,"col":85,"text":"강중훈","key":"강중훈"},{"tab":"woorim","office":"우림","address":"BO80","row":79,"col":66,"text":"박선미","key":"박선미"},{"tab":"woorim","office":"우림","address":"BR80","row":79,"col":69,"text":"오은비","key":"오은비"},{"tab":"woorim","office":"우림","address":"BU80","row":79,"col":72,"text":"윤명진","key":"윤명진"},{"tab":"woorim","office":"우림","address":"BY80","row":79,"col":76,"text":"서우진","key":"서우진"},{"tab":"woorim","office":"우림","address":"CB80","row":79,"col":79,"text":"하현우","key":"하현우"},{"tab":"woorim","office":"우림","address":"CE80","row":79,"col":82,"text":"서혜진","key":"서혜진"},{"tab":"dk18","office":"가산DK 18F","address":"B2","row":1,"col":1,"text":"가산DK 18층 라운지","key":"가산dk 18층 라운지"},{"tab":"dk18","office":"가산DK 18F","address":"Q2","row":1,"col":16,"text":"Conference room","key":"conference room"},{"tab":"dk18","office":"가산DK 18F","address":"AE2","row":1,"col":30,"text":"컬러 복합기","key":"컬러 복합기"},{"tab":"dk18","office":"가산DK 18F","address":"BW2","row":1,"col":74,"text":"임원실","key":"임원실"},{"tab":"dk18","office":"가산DK 18F","address":"BS3","row":2,"col":70,"text":"김예솔","key":"김예솔"},{"tab":"dk18","office":"가산DK 18F","address":"BT3","row":2,"col":71,"text":"정상모","key":"정상모"},{"tab":"dk18","office":"가산DK 18F","address":"AI4","row":3,"col":34,"text":"박종윤","key":"박종윤"},{"tab":"dk18","office":"가산DK 18F","address":"AU4","row":3,"col":46,"text":"김우중","key":"김우중"},{"tab":"dk18","office":"가산DK 18F","address":"AY4","row":3,"col":50,"text":"고상미","key":"고상미"},{"tab":"dk18","office":"가산DK 18F","address":"BC4","row":3,"col":54,"text":"김민주F","key":"김민주f"},{"tab":"dk18","office":"가산DK 18F","address":"BK4","row":3,"col":62,"text":"윤초희","key":"윤초희"},{"tab":"dk18","office":"가산DK 18F","address":"BO4","row":3,"col":66,"text":"이상곤","key":"이상곤"},{"tab":"dk18","office":"가산DK 18F","address":"W6","row":5,"col":22,"text":"A804","key":"a804"},{"tab":"dk18","office":"가산DK 18F","address":"Y6","row":5,"col":24,"text":"A805","key":"a805"},{"tab":"dk18","office":"가산DK 18F","address":"AA6","row":5,"col":26,"text":"A806","key":"a806"},{"tab":"dk18","office":"가산DK 18F","address":"AI6","row":5,"col":34,"text":"박미현 B","key":"박미현 b"},{"tab":"dk18","office":"가산DK 18F","address":"AJ6","row":5,"col":35,"text":"손진섭","key":"손진섭"},{"tab":"dk18","office":"가산DK 18F","address":"AM6","row":5,"col":38,"text":"김미령","key":"김미령"},{"tab":"dk18","office":"가산DK 18F","address":"AN6","row":5,"col":39,"text":"황가림","key":"황가림"},{"tab":"dk18","office":"가산DK 18F","address":"AQ6","row":5,"col":42,"text":"고유경","key":"고유경"},{"tab":"dk18","office":"가산DK 18F","address":"AR6","row":5,"col":43,"text":"김다솔","key":"김다솔"},{"tab":"dk18","office":"가산DK 18F","address":"AU6","row":5,"col":46,"text":"조광원","key":"조광원"},{"tab":"dk18","office":"가산DK 18F","address":"AV6","row":5,"col":47,"text":"박성민B","key":"박성민b"},{"tab":"dk18","office":"가산DK 18F","address":"AY6","row":5,"col":50,"text":"곽연희","key":"곽연희"},{"tab":"dk18","office":"가산DK 18F","address":"AZ6","row":5,"col":51,"text":"임채두","key":"임채두"},{"tab":"dk18","office":"가산DK 18F","address":"BC6","row":5,"col":54,"text":"김상백","key":"김상백"},{"tab":"dk18","office":"가산DK 18F","address":"BD6","row":5,"col":55,"text":"김준태","key":"김준태"},{"tab":"dk18","office":"가산DK 18F","address":"BG6","row":5,"col":58,"text":"이영규","key":"이영규"},{"tab":"dk18","office":"가산DK 18F","address":"BH6","row":5,"col":59,"text":"이영진","key":"이영진"},{"tab":"dk18","office":"가산DK 18F","address":"BK6","row":5,"col":62,"text":"선미미","key":"선미미"},{"tab":"dk18","office":"가산DK 18F","address":"BL6","row":5,"col":63,"text":"박유진 A","key":"박유진 a"},{"tab":"dk18","office":"가산DK 18F","address":"BO6","row":5,"col":66,"text":"정다예","key":"정다예"},{"tab":"dk18","office":"가산DK 18F","address":"BP6","row":5,"col":67,"text":"김영선","key":"김영선"},{"tab":"dk18","office":"가산DK 18F","address":"BS6","row":5,"col":70,"text":"류희범","key":"류희범"},{"tab":"dk18","office":"가산DK 18F","address":"BT6","row":5,"col":71,"text":"김병효","key":"김병효"},{"tab":"dk18","office":"가산DK 18F","address":"AF7","row":6,"col":31,"text":"우편, 비상 약품 외","key":"우편, 비상 약품 외"},{"tab":"dk18","office":"가산DK 18F","address":"AI9","row":8,"col":34,"text":"김예원C","key":"김예원c"},{"tab":"dk18","office":"가산DK 18F","address":"AJ9","row":8,"col":35,"text":"이혜연","key":"이혜연"},{"tab":"dk18","office":"가산DK 18F","address":"AM9","row":8,"col":38,"text":"신다연","key":"신다연"},{"tab":"dk18","office":"가산DK 18F","address":"AN9","row":8,"col":39,"text":"이민성","key":"이민성"},{"tab":"dk18","office":"가산DK 18F","address":"AQ9","row":8,"col":42,"text":"조민정","key":"조민정"},{"tab":"dk18","office":"가산DK 18F","address":"AR9","row":8,"col":43,"text":"윤보경","key":"윤보경"},{"tab":"dk18","office":"가산DK 18F","address":"AU9","row":8,"col":46,"text":"송진우","key":"송진우"},{"tab":"dk18","office":"가산DK 18F","address":"AY9","row":8,"col":50,"text":"주해란","key":"주해란"},{"tab":"dk18","office":"가산DK 18F","address":"BC9","row":8,"col":54,"text":"김선호","key":"김선호"},{"tab":"dk18","office":"가산DK 18F","address":"BD9","row":8,"col":55,"text":"전수민","key":"전수민"},{"tab":"dk18","office":"가산DK 18F","address":"BG9","row":8,"col":58,"text":"김혜빈","key":"김혜빈"},{"tab":"dk18","office":"가산DK 18F","address":"BH9","row":8,"col":59,"text":"오지영","key":"오지영"},{"tab":"dk18","office":"가산DK 18F","address":"BK9","row":8,"col":62,"text":"채유진","key":"채유진"},{"tab":"dk18","office":"가산DK 18F","address":"BL9","row":8,"col":63,"text":"유지수 B","key":"유지수 b"},{"tab":"dk18","office":"가산DK 18F","address":"BO9","row":8,"col":66,"text":"김도희","key":"김도희"},{"tab":"dk18","office":"가산DK 18F","address":"BP9","row":8,"col":67,"text":"이상원","key":"이상원"},{"tab":"dk18","office":"가산DK 18F","address":"BS9","row":8,"col":70,"text":"윤지영","key":"윤지영"},{"tab":"dk18","office":"가산DK 18F","address":"BT9","row":8,"col":71,"text":"이지은B","key":"이지은b"},{"tab":"dk18","office":"가산DK 18F","address":"AI12","row":11,"col":34,"text":"식품/유아팀","key":"식품/유아팀"},{"tab":"dk18","office":"가산DK 18F","address":"AM12","row":11,"col":38,"text":"스포츠팀","key":"스포츠팀"},{"tab":"dk18","office":"가산DK 18F","address":"AQ12","row":11,"col":42,"text":"가전팀","key":"가전팀"},{"tab":"dk18","office":"가산DK 18F","address":"AU12","row":11,"col":46,"text":"디지털/영상팀","key":"디지털/영상팀"},{"tab":"dk18","office":"가산DK 18F","address":"AY12","row":11,"col":50,"text":"패션/뷰티팀","key":"패션/뷰티팀"},{"tab":"dk18","office":"가산DK 18F","address":"BC12","row":11,"col":54,"text":"제휴사업팀","key":"제휴사업팀"},{"tab":"dk18","office":"가산DK 18F","address":"BK12","row":11,"col":62,"text":"생활/가구팀","key":"생활/가구팀"},{"tab":"dk18","office":"가산DK 18F","address":"BO12","row":11,"col":66,"text":"공구/자동차팀","key":"공구/자동차팀"},{"tab":"dk18","office":"가산DK 18F","address":"W13","row":12,"col":22,"text":"A801","key":"a801"},{"tab":"dk18","office":"가산DK 18F","address":"Y13","row":12,"col":24,"text":"A802","key":"a802"},{"tab":"dk18","office":"가산DK 18F","address":"AA13","row":12,"col":26,"text":"A803","key":"a803"},{"tab":"dk18","office":"가산DK 18F","address":"AI14","row":13,"col":34,"text":"페이먼트 사업팀","key":"페이먼트 사업팀"},{"tab":"dk18","office":"가산DK 18F","address":"BO14","row":13,"col":66,"text":"커넥트파이낸스","key":"커넥트파이낸스"},{"tab":"dk18","office":"가산DK 18F","address":"BW14","row":13,"col":74,"text":"A1201","key":"a1201"},{"tab":"dk18","office":"가산DK 18F","address":"AJ15","row":14,"col":35,"text":"망분리 PC","key":"망분리 pc"},{"tab":"dk18","office":"가산DK 18F","address":"AM15","row":14,"col":38,"text":"윤다은","key":"윤다은"},{"tab":"dk18","office":"가산DK 18F","address":"AN15","row":14,"col":39,"text":"안소연","key":"안소연"},{"tab":"dk18","office":"가산DK 18F","address":"AQ15","row":14,"col":42,"text":"최서희","key":"최서희"},{"tab":"dk18","office":"가산DK 18F","address":"AR15","row":14,"col":43,"text":"김다솜","key":"김다솜"},{"tab":"dk18","office":"가산DK 18F","address":"AU15","row":14,"col":46,"text":"정하예","key":"정하예"},{"tab":"dk18","office":"가산DK 18F","address":"AV15","row":14,"col":47,"text":"김은석","key":"김은석"},{"tab":"dk18","office":"가산DK 18F","address":"AY15","row":14,"col":50,"text":"유지수","key":"유지수"},{"tab":"dk18","office":"가산DK 18F","address":"BB15","row":14,"col":53,"text":"OA존 (복합기, 정수기 외)","key":"oa존 (복합기, 정수기 외)"},{"tab":"dk18","office":"가산DK 18F","address":"BH15","row":14,"col":59,"text":"김민경","key":"김민경"},{"tab":"dk18","office":"가산DK 18F","address":"BL15","row":14,"col":63,"text":"주민수","key":"주민수"},{"tab":"dk18","office":"가산DK 18F","address":"BO15","row":14,"col":66,"text":"이원호","key":"이원호"},{"tab":"dk18","office":"가산DK 18F","address":"BP15","row":14,"col":67,"text":"외부인력","key":"외부인력"},{"tab":"dk18","office":"가산DK 18F","address":"BS15","row":14,"col":70,"text":"외부인력","key":"외부인력"},{"tab":"dk18","office":"가산DK 18F","address":"BT15","row":14,"col":71,"text":"외부인력","key":"외부인력"},{"tab":"dk18","office":"가산DK 18F","address":"AJ18","row":17,"col":35,"text":"망분리 PC","key":"망분리 pc"},{"tab":"dk18","office":"가산DK 18F","address":"AM18","row":17,"col":38,"text":"장수현","key":"장수현"},{"tab":"dk18","office":"가산DK 18F","address":"AQ18","row":17,"col":42,"text":"양지수","key":"양지수"},{"tab":"dk18","office":"가산DK 18F","address":"AR18","row":17,"col":43,"text":"김연주","key":"김연주"},{"tab":"dk18","office":"가산DK 18F","address":"AU18","row":17,"col":46,"text":"김자윤","key":"김자윤"},{"tab":"dk18","office":"가산DK 18F","address":"AV18","row":17,"col":47,"text":"옹진아","key":"옹진아"},{"tab":"dk18","office":"가산DK 18F","address":"AY18","row":17,"col":50,"text":"조혜민","key":"조혜민"},{"tab":"dk18","office":"가산DK 18F","address":"BH18","row":17,"col":59,"text":"임혜선","key":"임혜선"},{"tab":"dk18","office":"가산DK 18F","address":"BK18","row":17,"col":62,"text":"이혜승","key":"이혜승"},{"tab":"dk18","office":"가산DK 18F","address":"BL18","row":17,"col":63,"text":"문가연","key":"문가연"},{"tab":"dk18","office":"가산DK 18F","address":"BO18","row":17,"col":66,"text":"외부인력","key":"외부인력"},{"tab":"dk18","office":"가산DK 18F","address":"BP18","row":17,"col":67,"text":"외부인력","key":"외부인력"},{"tab":"dk18","office":"가산DK 18F","address":"BS18","row":17,"col":70,"text":"외부인력","key":"외부인력"},{"tab":"dk18","office":"가산DK 18F","address":"BT18","row":17,"col":71,"text":"외부인력","key":"외부인력"},{"tab":"dk18","office":"가산DK 18F","address":"AI21","row":20,"col":34,"text":"고영빈","key":"고영빈"},{"tab":"dk18","office":"가산DK 18F","address":"AM21","row":20,"col":38,"text":"김혜리","key":"김혜리"},{"tab":"dk18","office":"가산DK 18F","address":"AQ21","row":20,"col":42,"text":"최슬기","key":"최슬기"},{"tab":"dk18","office":"가산DK 18F","address":"AR21","row":20,"col":43,"text":"허혜정","key":"허혜정"},{"tab":"dk18","office":"가산DK 18F","address":"AU21","row":20,"col":46,"text":"오슬기A","key":"오슬기a"},{"tab":"dk18","office":"가산DK 18F","address":"AY21","row":20,"col":50,"text":"윤지현","key":"윤지현"},{"tab":"dk18","office":"가산DK 18F","address":"BH21","row":20,"col":59,"text":"최은진","key":"최은진"},{"tab":"dk18","office":"가산DK 18F","address":"BK21","row":20,"col":62,"text":"송가온","key":"송가온"},{"tab":"dk18","office":"가산DK 18F","address":"BL21","row":20,"col":63,"text":"김예원B","key":"김예원b"},{"tab":"dk18","office":"가산DK 18F","address":"BO21","row":20,"col":66,"text":"외부인력","key":"외부인력"},{"tab":"dk18","office":"가산DK 18F","address":"BP21","row":20,"col":67,"text":"외부인력","key":"외부인력"},{"tab":"dk18","office":"가산DK 18F","address":"BS21","row":20,"col":70,"text":"외부인력","key":"외부인력"},{"tab":"dk18","office":"가산DK 18F","address":"BT21","row":20,"col":71,"text":"외부인력","key":"외부인력"},{"tab":"dk18","office":"가산DK 18F","address":"Z25","row":24,"col":25,"text":"출입문","key":"출입문"},{"tab":"dk18","office":"가산DK 18F","address":"BB25","row":24,"col":53,"text":"출입문","key":"출입문"},{"tab":"dk18","office":"가산DK 18F","address":"K30","row":29,"col":10,"text":"박스 배출","key":"박스 배출"},{"tab":"dk18","office":"가산DK 18F","address":"R30","row":29,"col":17,"text":"여자 화장실","key":"여자 화장실"},{"tab":"dk18","office":"가산DK 18F","address":"AF30","row":29,"col":31,"text":"엘리베이터","key":"엘리베이터"},{"tab":"dk18","office":"가산DK 18F","address":"AJ30","row":29,"col":35,"text":"비상용 엘리베이터 B","key":"비상용 엘리베이터 b"},{"tab":"dk18","office":"가산DK 18F","address":"BB30","row":29,"col":53,"text":"출입문","key":"출입문"},{"tab":"dk18","office":"가산DK 18F","address":"BX30","row":29,"col":75,"text":"임원실","key":"임원실"},{"tab":"dk18","office":"가산DK 18F","address":"AP32","row":31,"col":41,"text":"Cs room","key":"cs room"},{"tab":"dk18","office":"가산DK 18F","address":"AX32","row":31,"col":49,"text":"고객만족센터","key":"고객만족센터"},{"tab":"dk18","office":"가산DK 18F","address":"BB32","row":31,"col":53,"text":"PC사업3팀","key":"pc사업3팀"},{"tab":"dk18","office":"가산DK 18F","address":"BG32","row":31,"col":58,"text":"PC사업2팀","key":"pc사업2팀"},{"tab":"dk18","office":"가산DK 18F","address":"BK32","row":31,"col":62,"text":"PC사업1팀","key":"pc사업1팀"},{"tab":"dk18","office":"가산DK 18F","address":"BO32","row":31,"col":66,"text":"인프라사업팀","key":"인프라사업팀"},{"tab":"dk18","office":"가산DK 18F","address":"BV32","row":31,"col":73,"text":"OA (복합기, 원두머신)","key":"oa (복합기, 원두머신)"},{"tab":"dk18","office":"가산DK 18F","address":"AO33","row":32,"col":40,"text":"김선빈","key":"김선빈"},{"tab":"dk18","office":"가산DK 18F","address":"AR33","row":32,"col":43,"text":"김덕원","key":"김덕원"},{"tab":"dk18","office":"가산DK 18F","address":"AY33","row":32,"col":50,"text":"정인모","key":"정인모"},{"tab":"dk18","office":"가산DK 18F","address":"BC33","row":32,"col":54,"text":"최승헌","key":"최승헌"},{"tab":"dk18","office":"가산DK 18F","address":"BG33","row":32,"col":58,"text":"망분리PC","key":"망분리pc"},{"tab":"dk18","office":"가산DK 18F","address":"BH33","row":32,"col":59,"text":"홍석민","key":"홍석민"},{"tab":"dk18","office":"가산DK 18F","address":"BL33","row":32,"col":63,"text":"이진균","key":"이진균"},{"tab":"dk18","office":"가산DK 18F","address":"BO33","row":32,"col":66,"text":"전주회","key":"전주회"},{"tab":"dk18","office":"가산DK 18F","address":"BP33","row":32,"col":67,"text":"류원종","key":"류원종"},{"tab":"dk18","office":"가산DK 18F","address":"K34","row":33,"col":10,"text":"화물 엘리베이터","key":"화물 엘리베이터"},{"tab":"dk18","office":"가산DK 18F","address":"AO34","row":33,"col":40,"text":"이지은A","key":"이지은a"},{"tab":"dk18","office":"가산DK 18F","address":"AR34","row":33,"col":43,"text":"배민지","key":"배민지"},{"tab":"dk18","office":"가산DK 18F","address":"AP35","row":34,"col":41,"text":"고객만족센터","key":"고객만족센터"},{"tab":"dk18","office":"가산DK 18F","address":"BV35","row":34,"col":73,"text":"Test room","key":"test room"},{"tab":"dk18","office":"가산DK 18F","address":"AZ36","row":35,"col":51,"text":"홍연우","key":"홍연우"},{"tab":"dk18","office":"가산DK 18F","address":"BC36","row":35,"col":54,"text":"심성욱","key":"심성욱"},{"tab":"dk18","office":"가산DK 18F","address":"BD36","row":35,"col":55,"text":"박성호B","key":"박성호b"},{"tab":"dk18","office":"가산DK 18F","address":"BG36","row":35,"col":58,"text":"김지용A","key":"김지용a"},{"tab":"dk18","office":"가산DK 18F","address":"BH36","row":35,"col":59,"text":"정우진 A","key":"정우진 a"},{"tab":"dk18","office":"가산DK 18F","address":"BK36","row":35,"col":62,"text":"김민식","key":"김민식"},{"tab":"dk18","office":"가산DK 18F","address":"BL36","row":35,"col":63,"text":"윤종훈","key":"윤종훈"},{"tab":"dk18","office":"가산DK 18F","address":"BO36","row":35,"col":66,"text":"박정환","key":"박정환"},{"tab":"dk18","office":"가산DK 18F","address":"BP36","row":35,"col":67,"text":"양승주","key":"양승주"},{"tab":"dk18","office":"가산DK 18F","address":"BS36","row":35,"col":70,"text":"최재성","key":"최재성"},{"tab":"dk18","office":"가산DK 18F","address":"R38","row":37,"col":17,"text":"비상용 엘리베이터 A","key":"비상용 엘리베이터 a"},{"tab":"dk18","office":"가산DK 18F","address":"AJ38","row":37,"col":35,"text":"남자 화장실","key":"남자 화장실"},{"tab":"dk18","office":"가산DK 18F","address":"AZ39","row":38,"col":51,"text":"김성실","key":"김성실"},{"tab":"dk18","office":"가산DK 18F","address":"BC39","row":38,"col":54,"text":"김한성","key":"김한성"},{"tab":"dk18","office":"가산DK 18F","address":"BD39","row":38,"col":55,"text":"한규민","key":"한규민"},{"tab":"dk18","office":"가산DK 18F","address":"BG39","row":38,"col":58,"text":"전준환","key":"전준환"},{"tab":"dk18","office":"가산DK 18F","address":"BH39","row":38,"col":59,"text":"박동수","key":"박동수"},{"tab":"dk18","office":"가산DK 18F","address":"BK39","row":38,"col":62,"text":"박주현","key":"박주현"},{"tab":"dk18","office":"가산DK 18F","address":"BL39","row":38,"col":63,"text":"김태준","key":"김태준"},{"tab":"dk18","office":"가산DK 18F","address":"BO39","row":38,"col":66,"text":"용재순","key":"용재순"},{"tab":"dk18","office":"가산DK 18F","address":"BP39","row":38,"col":67,"text":"지민태","key":"지민태"},{"tab":"dk18","office":"가산DK 18F","address":"BS39","row":38,"col":70,"text":"유승훈","key":"유승훈"},{"tab":"dk18","office":"가산DK 18F","address":"K41","row":40,"col":10,"text":"메일룸","key":"메일룸"},{"tab":"dk18","office":"가산DK 18F","address":"BC42","row":41,"col":54,"text":"최상호","key":"최상호"},{"tab":"dk18","office":"가산DK 18F","address":"BG42","row":41,"col":58,"text":"김태빈","key":"김태빈"},{"tab":"dk18","office":"가산DK 18F","address":"BK42","row":41,"col":62,"text":"임승현","key":"임승현"},{"tab":"dk18","office":"가산DK 18F","address":"BO42","row":41,"col":66,"text":"문지훈","key":"문지훈"},{"tab":"dk18","office":"가산DK 18F","address":"X49","row":48,"col":23,"text":"탕비실","key":"탕비실"},{"tab":"dk18","office":"가산DK 18F","address":"Z49","row":48,"col":25,"text":"출입문","key":"출입문"},{"tab":"dk18","office":"가산DK 18F","address":"AE49","row":48,"col":30,"text":"B801","key":"b801"},{"tab":"dk18","office":"가산DK 18F","address":"AG49","row":48,"col":32,"text":"B1201","key":"b1201"},{"tab":"dk18","office":"가산DK 18F","address":"C50","row":49,"col":2,"text":"유종훈","key":"유종훈"},{"tab":"dk18","office":"가산DK 18F","address":"D50","row":49,"col":3,"text":"전산","key":"전산"},{"tab":"dk18","office":"가산DK 18F","address":"R50","row":49,"col":17,"text":"박상필","key":"박상필"},{"tab":"dk18","office":"가산DK 18F","address":"S50","row":49,"col":18,"text":"박민철","key":"박민철"},{"tab":"dk18","office":"가산DK 18F","address":"V50","row":49,"col":21,"text":"장지은","key":"장지은"},{"tab":"dk18","office":"가산DK 18F","address":"AI50","row":49,"col":34,"text":"박빛나","key":"박빛나"},{"tab":"dk18","office":"가산DK 18F","address":"AL50","row":49,"col":37,"text":"이혜진","key":"이혜진"},{"tab":"dk18","office":"가산DK 18F","address":"AM50","row":49,"col":38,"text":"최다빈","key":"최다빈"},{"tab":"dk18","office":"가산DK 18F","address":"AP51","row":50,"col":41,"text":"전가연","key":"전가연"},{"tab":"dk18","office":"가산DK 18F","address":"AT51","row":50,"col":45,"text":"박난희","key":"박난희"},{"tab":"dk18","office":"가산DK 18F","address":"C53","row":52,"col":2,"text":"정아름","key":"정아름"},{"tab":"dk18","office":"가산DK 18F","address":"D53","row":52,"col":3,"text":"전산","key":"전산"},{"tab":"dk18","office":"가산DK 18F","address":"G53","row":52,"col":6,"text":"최승일 B","key":"최승일 b"},{"tab":"dk18","office":"가산DK 18F","address":"I53","row":52,"col":8,"text":"김지나","key":"김지나"},{"tab":"dk18","office":"가산DK 18F","address":"R53","row":52,"col":17,"text":"양혜리","key":"양혜리"},{"tab":"dk18","office":"가산DK 18F","address":"S53","row":52,"col":18,"text":"엄상식","key":"엄상식"},{"tab":"dk18","office":"가산DK 18F","address":"V53","row":52,"col":21,"text":"전태중","key":"전태중"},{"tab":"dk18","office":"가산DK 18F","address":"AI53","row":52,"col":34,"text":"백혜미","key":"백혜미"},{"tab":"dk18","office":"가산DK 18F","address":"AM53","row":52,"col":38,"text":"이효정","key":"이효정"},{"tab":"dk18","office":"가산DK 18F","address":"AP53","row":52,"col":41,"text":"남궁윤","key":"남궁윤"},{"tab":"dk18","office":"가산DK 18F","address":"AQ53","row":52,"col":42,"text":"이주","key":"이주"},{"tab":"dk18","office":"가산DK 18F","address":"C56","row":55,"col":2,"text":"이 건","key":"이 건"},{"tab":"dk18","office":"가산DK 18F","address":"D56","row":55,"col":3,"text":"정태수","key":"정태수"},{"tab":"dk18","office":"가산DK 18F","address":"G56","row":55,"col":6,"text":"한혜영","key":"한혜영"},{"tab":"dk18","office":"가산DK 18F","address":"I56","row":55,"col":8,"text":"원현아","key":"원현아"},{"tab":"dk18","office":"가산DK 18F","address":"R56","row":55,"col":17,"text":"김민주 E","key":"김민주 e"},{"tab":"dk18","office":"가산DK 18F","address":"S56","row":55,"col":18,"text":"백희우","key":"백희우"},{"tab":"dk18","office":"가산DK 18F","address":"V56","row":55,"col":21,"text":"박대웅","key":"박대웅"},{"tab":"dk18","office":"가산DK 18F","address":"AI56","row":55,"col":34,"text":"박수빈 B","key":"박수빈 b"},{"tab":"dk18","office":"가산DK 18F","address":"AL56","row":55,"col":37,"text":"양슬기","key":"양슬기"},{"tab":"dk18","office":"가산DK 18F","address":"AM56","row":55,"col":38,"text":"김슬기","key":"김슬기"},{"tab":"dk18","office":"가산DK 18F","address":"AP56","row":55,"col":41,"text":"김이온","key":"김이온"},{"tab":"dk18","office":"가산DK 18F","address":"AQ56","row":55,"col":42,"text":"한혜진","key":"한혜진"},{"tab":"dk18","office":"가산DK 18F","address":"AT56","row":55,"col":45,"text":"김나형","key":"김나형"},{"tab":"dk18","office":"가산DK 18F","address":"AU56","row":55,"col":46,"text":"여인서","key":"여인서"},{"tab":"dk18","office":"가산DK 18F","address":"C59","row":58,"col":2,"text":"GA팀","key":"ga팀"},{"tab":"dk18","office":"가산DK 18F","address":"G59","row":58,"col":6,"text":"학원서비스팀","key":"학원서비스팀"},{"tab":"dk18","office":"가산DK 18F","address":"U59","row":58,"col":20,"text":"자동차사업팀","key":"자동차사업팀"},{"tab":"dk18","office":"가산DK 18F","address":"AK59","row":58,"col":36,"text":"광고성과운영팀","key":"광고성과운영팀"},{"tab":"dk18","office":"가산DK 18F","address":"AT59","row":58,"col":45,"text":"자동차사업팀","key":"자동차사업팀"},{"tab":"dk18","office":"가산DK 18F","address":"C61","row":60,"col":2,"text":"모바일/AI서비스팀","key":"모바일/ai서비스팀"},{"tab":"dk18","office":"가산DK 18F","address":"G61","row":60,"col":6,"text":"모바일/AI사업팀","key":"모바일/ai사업팀"},{"tab":"dk18","office":"가산DK 18F","address":"O61","row":60,"col":14,"text":"스토어 사업팀","key":"스토어 사업팀"},{"tab":"dk18","office":"가산DK 18F","address":"R61","row":60,"col":17,"text":"컴퓨터팀","key":"컴퓨터팀"},{"tab":"dk18","office":"가산DK 18F","address":"AM61","row":60,"col":38,"text":"광고영업팀","key":"광고영업팀"},{"tab":"dk18","office":"가산DK 18F","address":"AT61","row":60,"col":45,"text":"광고네트워크전략팀","key":"광고네트워크전략팀"},{"tab":"dk18","office":"가산DK 18F","address":"D62","row":61,"col":3,"text":"박준영","key":"박준영"},{"tab":"dk18","office":"가산DK 18F","address":"O62","row":61,"col":14,"text":"태상혁","key":"태상혁"},{"tab":"dk18","office":"가산DK 18F","address":"R62","row":61,"col":17,"text":"김병찬","key":"김병찬"},{"tab":"dk18","office":"가산DK 18F","address":"S62","row":61,"col":18,"text":"최형모","key":"최형모"},{"tab":"dk18","office":"가산DK 18F","address":"X62","row":61,"col":23,"text":"B803","key":"b803"},{"tab":"dk18","office":"가산DK 18F","address":"Z62","row":61,"col":25,"text":"공용창고","key":"공용창고"},{"tab":"dk18","office":"가산DK 18F","address":"AG62","row":61,"col":32,"text":"B802","key":"b802"},{"tab":"dk18","office":"가산DK 18F","address":"AI62","row":61,"col":34,"text":"택배 PC","key":"택배 pc"},{"tab":"dk18","office":"가산DK 18F","address":"AL62","row":61,"col":37,"text":"우재윤","key":"우재윤"},{"tab":"dk18","office":"가산DK 18F","address":"AM62","row":61,"col":38,"text":"나애진","key":"나애진"},{"tab":"dk18","office":"가산DK 18F","address":"AP62","row":61,"col":41,"text":"정지수","key":"정지수"},{"tab":"dk18","office":"가산DK 18F","address":"AQ62","row":61,"col":42,"text":"이윤정","key":"이윤정"},{"tab":"dk18","office":"가산DK 18F","address":"AT62","row":61,"col":45,"text":"신용길","key":"신용길"},{"tab":"dk18","office":"가산DK 18F","address":"AU62","row":61,"col":46,"text":"유지선","key":"유지선"},{"tab":"dk18","office":"가산DK 18F","address":"C65","row":64,"col":2,"text":"유슬기","key":"유슬기"},{"tab":"dk18","office":"가산DK 18F","address":"D65","row":64,"col":3,"text":"유다윤","key":"유다윤"},{"tab":"dk18","office":"가산DK 18F","address":"F65","row":64,"col":5,"text":"김주애","key":"김주애"},{"tab":"dk18","office":"가산DK 18F","address":"J65","row":64,"col":9,"text":"복합기","key":"복합기"},{"tab":"dk18","office":"가산DK 18F","address":"O65","row":64,"col":14,"text":"김나현 A","key":"김나현 a"},{"tab":"dk18","office":"가산DK 18F","address":"R65","row":64,"col":17,"text":"조은영","key":"조은영"},{"tab":"dk18","office":"가산DK 18F","address":"S65","row":64,"col":18,"text":"안태우","key":"안태우"},{"tab":"dk18","office":"가산DK 18F","address":"AL65","row":64,"col":37,"text":"윤선학","key":"윤선학"},{"tab":"dk18","office":"가산DK 18F","address":"AM65","row":64,"col":38,"text":"김미형","key":"김미형"},{"tab":"dk18","office":"가산DK 18F","address":"AP65","row":64,"col":41,"text":"정대무","key":"정대무"},{"tab":"dk18","office":"가산DK 18F","address":"AQ65","row":64,"col":42,"text":"김준혁","key":"김준혁"},{"tab":"dk18","office":"가산DK 18F","address":"AU65","row":64,"col":46,"text":"김경철","key":"김경철"},{"tab":"dk18","office":"가산DK 18F","address":"C68","row":67,"col":2,"text":"권보라","key":"권보라"},{"tab":"dk18","office":"가산DK 18F","address":"F68","row":67,"col":5,"text":"장순필","key":"장순필"},{"tab":"dk18","office":"가산DK 18F","address":"O68","row":67,"col":14,"text":"박정훈","key":"박정훈"},{"tab":"dk18","office":"가산DK 18F","address":"R68","row":67,"col":17,"text":"박지훈","key":"박지훈"},{"tab":"dk18","office":"가산DK 18F","address":"AP68","row":67,"col":41,"text":"정경모","key":"정경모"},{"tab":"dk18","office":"가산DK 18F","address":"AT68","row":67,"col":45,"text":"박성범","key":"박성범"},{"tab":"dk17","office":"가산DK 17F","address":"X2","row":1,"col":23,"text":"여자 화장실","key":"여자 화장실"},{"tab":"dk17","office":"가산DK 17F","address":"AM2","row":1,"col":38,"text":"엘리베이터","key":"엘리베이터"},{"tab":"dk17","office":"가산DK 17F","address":"AQ2","row":1,"col":42,"text":"비상용 엘리베이터 B","key":"비상용 엘리베이터 b"},{"tab":"dk17","office":"가산DK 17F","address":"AX2","row":1,"col":49,"text":"출입문","key":"출입문"},{"tab":"dk17","office":"가산DK 17F","address":"BD2","row":1,"col":55,"text":"출입문","key":"출입문"},{"tab":"dk17","office":"가산DK 17F","address":"AV3","row":2,"col":47,"text":"공용 회의실","key":"공용 회의실"},{"tab":"dk17","office":"가산DK 17F","address":"BC3","row":2,"col":54,"text":"가산DK 17층 라운지","key":"가산dk 17층 라운지"},{"tab":"dk17","office":"가산DK 17F","address":"Q6","row":5,"col":16,"text":"화물 엘리베이터","key":"화물 엘리베이터"},{"tab":"dk17","office":"가산DK 17F","address":"X10","row":9,"col":23,"text":"비상용 엘리베이터 A","key":"비상용 엘리베이터 a"},{"tab":"dk17","office":"가산DK 17F","address":"AQ10","row":9,"col":42,"text":"남자 화장실","key":"남자 화장실"},{"tab":"dk17","office":"가산DK 17F","address":"Q13","row":12,"col":16,"text":"메일룸 박스 배출","key":"메일룸 박스 배출"},{"tab":"dk17","office":"가산DK 17F","address":"AX16","row":15,"col":49,"text":"출입문","key":"출입문"},{"tab":"dk17","office":"가산DK 17F","address":"M20","row":19,"col":12,"text":"임원실","key":"임원실"},{"tab":"dk17","office":"가산DK 17F","address":"R20","row":19,"col":17,"text":"에누리 회의실","key":"에누리 회의실"},{"tab":"dk17","office":"가산DK 17F","address":"Z20","row":19,"col":25,"text":"B회의실","key":"b회의실"},{"tab":"dk17","office":"가산DK 17F","address":"AG20","row":19,"col":32,"text":"출입문","key":"출입문"},{"tab":"dk17","office":"가산DK 17F","address":"AL20","row":19,"col":37,"text":"A회의실","key":"a회의실"},{"tab":"dk17","office":"가산DK 17F","address":"AP20","row":19,"col":41,"text":"써머스 회의실","key":"써머스 회의실"},{"tab":"dk17","office":"가산DK 17F","address":"AW20","row":19,"col":48,"text":"출입문","key":"출입문"},{"tab":"dk17","office":"가산DK 17F","address":"AZ20","row":19,"col":51,"text":"대표실","key":"대표실"},{"tab":"dk17","office":"가산DK 17F","address":"C21","row":20,"col":2,"text":"임병진","key":"임병진"},{"tab":"dk17","office":"가산DK 17F","address":"F21","row":20,"col":5,"text":"이근호","key":"이근호"},{"tab":"dk17","office":"가산DK 17F","address":"G21","row":20,"col":6,"text":"임경아","key":"임경아"},{"tab":"dk17","office":"가산DK 17F","address":"L23","row":22,"col":11,"text":"복합기","key":"복합기"},{"tab":"dk17","office":"가산DK 17F","address":"C24","row":23,"col":2,"text":"신의진","key":"신의진"},{"tab":"dk17","office":"가산DK 17F","address":"F24","row":23,"col":5,"text":"송기윤","key":"송기윤"},{"tab":"dk17","office":"가산DK 17F","address":"G24","row":23,"col":6,"text":"이은화","key":"이은화"},{"tab":"dk17","office":"가산DK 17F","address":"AW24","row":23,"col":48,"text":"복합기","key":"복합기"},{"tab":"dk17","office":"가산DK 17F","address":"AC27","row":26,"col":28,"text":"서비스기획본부","key":"서비스기획본부"},{"tab":"dk17","office":"가산DK 17F","address":"C28","row":27,"col":2,"text":"커뮤니티실","key":"커뮤니티실"},{"tab":"dk17","office":"가산DK 17F","address":"I28","row":27,"col":8,"text":"퍼포먼스마케팅팀","key":"퍼포먼스마케팅팀"},{"tab":"dk17","office":"가산DK 17F","address":"N28","row":27,"col":13,"text":"데이터마케팅팀","key":"데이터마케팅팀"},{"tab":"dk17","office":"가산DK 17F","address":"S28","row":27,"col":18,"text":"다나와서비스기획팀","key":"다나와서비스기획팀"},{"tab":"dk17","office":"가산DK 17F","address":"AA28","row":27,"col":26,"text":"에누리서비스기획팀","key":"에누리서비스기획팀"},{"tab":"dk17","office":"가산DK 17F","address":"AL28","row":27,"col":37,"text":"UX디자인팀","key":"ux디자인팀"},{"tab":"dk17","office":"가산DK 17F","address":"AP28","row":27,"col":41,"text":"콘텐츠디자인팀","key":"콘텐츠디자인팀"},{"tab":"dk17","office":"가산DK 17F","address":"AV28","row":27,"col":47,"text":"그로스해킹실","key":"그로스해킹실"},{"tab":"dk17","office":"가산DK 17F","address":"AZ28","row":27,"col":51,"text":"신사업개발팀","key":"신사업개발팀"},{"tab":"dk17","office":"가산DK 17F","address":"C29","row":28,"col":2,"text":"조아라 D","key":"조아라 d"},{"tab":"dk17","office":"가산DK 17F","address":"F29","row":28,"col":5,"text":"오지윤 B","key":"오지윤 b"},{"tab":"dk17","office":"가산DK 17F","address":"G29","row":28,"col":6,"text":"이민희","key":"이민희"},{"tab":"dk17","office":"가산DK 17F","address":"J29","row":28,"col":9,"text":"박기연","key":"박기연"},{"tab":"dk17","office":"가산DK 17F","address":"K29","row":28,"col":10,"text":"김민지D","key":"김민지d"},{"tab":"dk17","office":"가산DK 17F","address":"N29","row":28,"col":13,"text":"임홍란","key":"임홍란"},{"tab":"dk17","office":"가산DK 17F","address":"O29","row":28,"col":14,"text":"박래승","key":"박래승"},{"tab":"dk17","office":"가산DK 17F","address":"R29","row":28,"col":17,"text":"손우진","key":"손우진"},{"tab":"dk17","office":"가산DK 17F","address":"S29","row":28,"col":18,"text":"망분리","key":"망분리"},{"tab":"dk17","office":"가산DK 17F","address":"V29","row":28,"col":21,"text":"이재홍","key":"이재홍"},{"tab":"dk17","office":"가산DK 17F","address":"W29","row":28,"col":22,"text":"유제민","key":"유제민"},{"tab":"dk17","office":"가산DK 17F","address":"Z29","row":28,"col":25,"text":"김나현 A","key":"김나현 a"},{"tab":"dk17","office":"가산DK 17F","address":"AA29","row":28,"col":26,"text":"태상혁","key":"태상혁"},{"tab":"dk17","office":"가산DK 17F","address":"AD29","row":28,"col":29,"text":"김민지C","key":"김민지c"},{"tab":"dk17","office":"가산DK 17F","address":"AK29","row":28,"col":36,"text":"김예슬","key":"김예슬"},{"tab":"dk17","office":"가산DK 17F","address":"AL29","row":28,"col":37,"text":"김예진","key":"김예진"},{"tab":"dk17","office":"가산DK 17F","address":"AO29","row":28,"col":40,"text":"신유진","key":"신유진"},{"tab":"dk17","office":"가산DK 17F","address":"AP29","row":28,"col":41,"text":"이혜인","key":"이혜인"},{"tab":"dk17","office":"가산DK 17F","address":"AS29","row":28,"col":44,"text":"이슬이","key":"이슬이"},{"tab":"dk17","office":"가산DK 17F","address":"C32","row":31,"col":2,"text":"최정표","key":"최정표"},{"tab":"dk17","office":"가산DK 17F","address":"F32","row":31,"col":5,"text":"임욱빈","key":"임욱빈"},{"tab":"dk17","office":"가산DK 17F","address":"G32","row":31,"col":6,"text":"유정은","key":"유정은"},{"tab":"dk17","office":"가산DK 17F","address":"J32","row":31,"col":9,"text":"임우진","key":"임우진"},{"tab":"dk17","office":"가산DK 17F","address":"K32","row":31,"col":10,"text":"백소희","key":"백소희"},{"tab":"dk17","office":"가산DK 17F","address":"N32","row":31,"col":13,"text":"임재란","key":"임재란"},{"tab":"dk17","office":"가산DK 17F","address":"O32","row":31,"col":14,"text":"이민아","key":"이민아"},{"tab":"dk17","office":"가산DK 17F","address":"R32","row":31,"col":17,"text":"이호원","key":"이호원"},{"tab":"dk17","office":"가산DK 17F","address":"S32","row":31,"col":18,"text":"조현진","key":"조현진"},{"tab":"dk17","office":"가산DK 17F","address":"W32","row":31,"col":22,"text":"이승엽","key":"이승엽"},{"tab":"dk17","office":"가산DK 17F","address":"Z32","row":31,"col":25,"text":"이효빈","key":"이효빈"},{"tab":"dk17","office":"가산DK 17F","address":"AD32","row":31,"col":29,"text":"김민정B","key":"김민정b"},{"tab":"dk17","office":"가산DK 17F","address":"AK32","row":31,"col":36,"text":"한수민","key":"한수민"},{"tab":"dk17","office":"가산DK 17F","address":"AL32","row":31,"col":37,"text":"김진현B","key":"김진현b"},{"tab":"dk17","office":"가산DK 17F","address":"AO32","row":31,"col":40,"text":"김지영D","key":"김지영d"},{"tab":"dk17","office":"가산DK 17F","address":"AP32","row":31,"col":41,"text":"송정민","key":"송정민"},{"tab":"dk17","office":"가산DK 17F","address":"AS32","row":31,"col":44,"text":"임지영B","key":"임지영b"},{"tab":"dk17","office":"가산DK 17F","address":"AW32","row":31,"col":48,"text":"강민지A","key":"강민지a"},{"tab":"dk17","office":"가산DK 17F","address":"AX32","row":31,"col":49,"text":"이동수","key":"이동수"},{"tab":"dk17","office":"가산DK 17F","address":"BA32","row":31,"col":52,"text":"유병진","key":"유병진"},{"tab":"dk17","office":"가산DK 17F","address":"BB32","row":31,"col":53,"text":"박장훈","key":"박장훈"},{"tab":"dk17","office":"가산DK 17F","address":"C35","row":34,"col":2,"text":"홍석표","key":"홍석표"},{"tab":"dk17","office":"가산DK 17F","address":"F35","row":34,"col":5,"text":"조은혜","key":"조은혜"},{"tab":"dk17","office":"가산DK 17F","address":"G35","row":34,"col":6,"text":"박소연","key":"박소연"},{"tab":"dk17","office":"가산DK 17F","address":"J35","row":34,"col":9,"text":"허진서","key":"허진서"},{"tab":"dk17","office":"가산DK 17F","address":"N35","row":34,"col":13,"text":"최미정","key":"최미정"},{"tab":"dk17","office":"가산DK 17F","address":"O35","row":34,"col":14,"text":"김환희","key":"김환희"},{"tab":"dk17","office":"가산DK 17F","address":"R35","row":34,"col":17,"text":"윤현일","key":"윤현일"},{"tab":"dk17","office":"가산DK 17F","address":"S35","row":34,"col":18,"text":"임정원","key":"임정원"},{"tab":"dk17","office":"가산DK 17F","address":"V35","row":34,"col":21,"text":"김태우","key":"김태우"},{"tab":"dk17","office":"가산DK 17F","address":"W35","row":34,"col":22,"text":"남이슬","key":"남이슬"},{"tab":"dk17","office":"가산DK 17F","address":"Z35","row":34,"col":25,"text":"이병석","key":"이병석"},{"tab":"dk17","office":"가산DK 17F","address":"AA35","row":34,"col":26,"text":"김예솔","key":"김예솔"},{"tab":"dk17","office":"가산DK 17F","address":"AD35","row":34,"col":29,"text":"문영민","key":"문영민"},{"tab":"dk17","office":"가산DK 17F","address":"AK35","row":34,"col":36,"text":"서주영","key":"서주영"},{"tab":"dk17","office":"가산DK 17F","address":"AL35","row":34,"col":37,"text":"김소라","key":"김소라"},{"tab":"dk17","office":"가산DK 17F","address":"AO35","row":34,"col":40,"text":"장은지","key":"장은지"},{"tab":"dk17","office":"가산DK 17F","address":"AP35","row":34,"col":41,"text":"박광덕","key":"박광덕"},{"tab":"dk17","office":"가산DK 17F","address":"AS35","row":34,"col":44,"text":"최세미","key":"최세미"},{"tab":"dk17","office":"가산DK 17F","address":"AT35","row":34,"col":45,"text":"조민주","key":"조민주"},{"tab":"dk17","office":"가산DK 17F","address":"AW35","row":34,"col":48,"text":"유지양","key":"유지양"},{"tab":"dk17","office":"가산DK 17F","address":"AX35","row":34,"col":49,"text":"이창명","key":"이창명"},{"tab":"dk17","office":"가산DK 17F","address":"BA35","row":34,"col":52,"text":"최현준","key":"최현준"},{"tab":"dk17","office":"가산DK 17F","address":"BB35","row":34,"col":53,"text":"정태훈","key":"정태훈"},{"tab":"dk17","office":"가산DK 17F","address":"F38","row":37,"col":5,"text":"정도일","key":"정도일"},{"tab":"dk17","office":"가산DK 17F","address":"G38","row":37,"col":6,"text":"허완회","key":"허완회"},{"tab":"dk17","office":"가산DK 17F","address":"S38","row":37,"col":18,"text":"김지혜","key":"김지혜"},{"tab":"dk17","office":"가산DK 17F","address":"W38","row":37,"col":22,"text":"권규란","key":"권규란"},{"tab":"dk17","office":"가산DK 17F","address":"Z38","row":37,"col":25,"text":"김영춘","key":"김영춘"},{"tab":"dk17","office":"가산DK 17F","address":"AA38","row":37,"col":26,"text":"이상인","key":"이상인"},{"tab":"dk17","office":"가산DK 17F","address":"AD38","row":37,"col":29,"text":"이난아","key":"이난아"},{"tab":"dk17","office":"가산DK 17F","address":"AK38","row":37,"col":36,"text":"변훈","key":"변훈"},{"tab":"dk17","office":"가산DK 17F","address":"AO38","row":37,"col":40,"text":"정성희","key":"정성희"},{"tab":"dk17","office":"가산DK 17F","address":"AP38","row":37,"col":41,"text":"이상헌","key":"이상헌"},{"tab":"dk17","office":"가산DK 17F","address":"AS38","row":37,"col":44,"text":"손난","key":"손난"},{"tab":"dk17","office":"가산DK 17F","address":"AT38","row":37,"col":45,"text":"김세라","key":"김세라"},{"tab":"dk17","office":"가산DK 17F","address":"AW38","row":37,"col":48,"text":"정종범","key":"정종범"},{"tab":"gplus","office":"지플러스","address":"B2","row":1,"col":1,"text":"플레이오토 라운지","key":"플레이오토 라운지"},{"tab":"gplus","office":"지플러스","address":"AF2","row":1,"col":31,"text":"화물엘리베이터","key":"화물엘리베이터"},{"tab":"gplus","office":"지플러스","address":"AL2","row":1,"col":37,"text":"엘리베이터 A","key":"엘리베이터 a"},{"tab":"gplus","office":"지플러스","address":"BL2","row":1,"col":63,"text":"여자화장실","key":"여자화장실"},{"tab":"gplus","office":"지플러스","address":"BP2","row":1,"col":67,"text":"남자화장실","key":"남자화장실"},{"tab":"gplus","office":"지플러스","address":"BT2","row":1,"col":71,"text":"회의실","key":"회의실"},{"tab":"gplus","office":"지플러스","address":"BX2","row":1,"col":75,"text":"미니휴게실","key":"미니휴게실"},{"tab":"gplus","office":"지플러스","address":"CC2","row":1,"col":80,"text":"회의실","key":"회의실"},{"tab":"gplus","office":"지플러스","address":"AF9","row":8,"col":31,"text":"분리수거공간","key":"분리수거공간"},{"tab":"gplus","office":"지플러스","address":"AL9","row":8,"col":37,"text":"엘리베이터 B","key":"엘리베이터 b"},{"tab":"gplus","office":"지플러스","address":"CC9","row":8,"col":80,"text":"회의실","key":"회의실"},{"tab":"gplus","office":"지플러스","address":"Q15","row":14,"col":16,"text":"출입구","key":"출입구"},{"tab":"gplus","office":"지플러스","address":"F16","row":15,"col":5,"text":"회의실","key":"회의실"},{"tab":"gplus","office":"지플러스","address":"AF16","row":15,"col":31,"text":"출입문","key":"출입문"},{"tab":"gplus","office":"지플러스","address":"BT16","row":15,"col":71,"text":"출입문","key":"출입문"},{"tab":"gplus","office":"지플러스","address":"CN16","row":15,"col":91,"text":"회의실","key":"회의실"},{"tab":"gplus","office":"지플러스","address":"Q22","row":21,"col":16,"text":"출입구","key":"출입구"},{"tab":"gplus","office":"지플러스","address":"AA22","row":21,"col":26,"text":"출입문","key":"출입문"},{"tab":"gplus","office":"지플러스","address":"AL22","row":21,"col":37,"text":"김지예","key":"김지예"},{"tab":"gplus","office":"지플러스","address":"AM22","row":21,"col":38,"text":"오슬기B","key":"오슬기b"},{"tab":"gplus","office":"지플러스","address":"AP22","row":21,"col":41,"text":"김진욱","key":"김진욱"},{"tab":"gplus","office":"지플러스","address":"AQ22","row":21,"col":42,"text":"한미리","key":"한미리"},{"tab":"gplus","office":"지플러스","address":"AT22","row":21,"col":45,"text":"유경빈","key":"유경빈"},{"tab":"gplus","office":"지플러스","address":"AU22","row":21,"col":46,"text":"캡스","key":"캡스"},{"tab":"gplus","office":"지플러스","address":"AX22","row":21,"col":49,"text":"권민지","key":"권민지"},{"tab":"gplus","office":"지플러스","address":"AY22","row":21,"col":50,"text":"정현아","key":"정현아"},{"tab":"gplus","office":"지플러스","address":"BB22","row":21,"col":53,"text":"경영지원","key":"경영지원"},{"tab":"gplus","office":"지플러스","address":"BC22","row":21,"col":54,"text":"김주환A","key":"김주환a"},{"tab":"gplus","office":"지플러스","address":"BD22","row":21,"col":55,"text":"사물함, 비품함","key":"사물함, 비품함"},{"tab":"gplus","office":"지플러스","address":"BH22","row":21,"col":59,"text":"출입문","key":"출입문"},{"tab":"gplus","office":"지플러스","address":"CI22","row":21,"col":86,"text":"여자휴게실","key":"여자휴게실"},{"tab":"gplus","office":"지플러스","address":"B23","row":22,"col":1,"text":"카페테리아","key":"카페테리아"},{"tab":"gplus","office":"지플러스","address":"BR24","row":23,"col":69,"text":"김민창","key":"김민창"},{"tab":"gplus","office":"지플러스","address":"BU24","row":23,"col":72,"text":"나경태","key":"나경태"},{"tab":"gplus","office":"지플러스","address":"BV24","row":23,"col":73,"text":"박인철","key":"박인철"},{"tab":"gplus","office":"지플러스","address":"AM25","row":24,"col":38,"text":"김정길","key":"김정길"},{"tab":"gplus","office":"지플러스","address":"AP25","row":24,"col":41,"text":"진용석","key":"진용석"},{"tab":"gplus","office":"지플러스","address":"AQ25","row":24,"col":42,"text":"이태희","key":"이태희"},{"tab":"gplus","office":"지플러스","address":"AT25","row":24,"col":45,"text":"김채원","key":"김채원"},{"tab":"gplus","office":"지플러스","address":"AU25","row":24,"col":46,"text":"이시현","key":"이시현"},{"tab":"gplus","office":"지플러스","address":"AX25","row":24,"col":49,"text":"김수빈","key":"김수빈"},{"tab":"gplus","office":"지플러스","address":"V26","row":25,"col":21,"text":"대회의실","key":"대회의실"},{"tab":"gplus","office":"지플러스","address":"AA26","row":25,"col":26,"text":"회의실","key":"회의실"},{"tab":"gplus","office":"지플러스","address":"BR27","row":26,"col":69,"text":"김상남","key":"김상남"},{"tab":"gplus","office":"지플러스","address":"BU27","row":26,"col":72,"text":"송슬기","key":"송슬기"},{"tab":"gplus","office":"지플러스","address":"BV27","row":26,"col":73,"text":"서혜린","key":"서혜린"},{"tab":"gplus","office":"지플러스","address":"AL28","row":27,"col":37,"text":"김태현","key":"김태현"},{"tab":"gplus","office":"지플러스","address":"AM28","row":27,"col":38,"text":"이지현","key":"이지현"},{"tab":"gplus","office":"지플러스","address":"AP28","row":27,"col":41,"text":"석미혜","key":"석미혜"},{"tab":"gplus","office":"지플러스","address":"AQ28","row":27,"col":42,"text":"원현정","key":"원현정"},{"tab":"gplus","office":"지플러스","address":"AT28","row":27,"col":45,"text":"김경이","key":"김경이"},{"tab":"gplus","office":"지플러스","address":"AU28","row":27,"col":46,"text":"신현인","key":"신현인"},{"tab":"gplus","office":"지플러스","address":"BC28","row":27,"col":54,"text":"윤유리","key":"윤유리"},{"tab":"gplus","office":"지플러스","address":"BR30","row":29,"col":69,"text":"이우령","key":"이우령"},{"tab":"gplus","office":"지플러스","address":"BU30","row":29,"col":72,"text":"백승연","key":"백승연"},{"tab":"gplus","office":"지플러스","address":"AL31","row":30,"col":37,"text":"박단비","key":"박단비"},{"tab":"gplus","office":"지플러스","address":"AM31","row":30,"col":38,"text":"심윤화","key":"심윤화"},{"tab":"gplus","office":"지플러스","address":"AT31","row":30,"col":45,"text":"최인수","key":"최인수"},{"tab":"gplus","office":"지플러스","address":"AU31","row":30,"col":46,"text":"임혜란","key":"임혜란"},{"tab":"gplus","office":"지플러스","address":"G32","row":31,"col":6,"text":"세미나실","key":"세미나실"},{"tab":"gplus","office":"지플러스","address":"AA32","row":31,"col":26,"text":"임원실 (이효준)","key":"임원실 (이효준)"},{"tab":"gplus","office":"지플러스","address":"BR33","row":32,"col":69,"text":"개발3실","key":"개발3실"},{"tab":"gplus","office":"지플러스","address":"AL34","row":33,"col":37,"text":"운영실","key":"운영실"},{"tab":"gplus","office":"지플러스","address":"AW34","row":33,"col":48,"text":"서비스UX/UI","key":"서비스ux/ui"},{"tab":"gplus","office":"지플러스","address":"AK39","row":38,"col":36,"text":"세일즈실","key":"세일즈실"},{"tab":"gplus","office":"지플러스","address":"AT39","row":38,"col":45,"text":"QA","key":"qa"},{"tab":"gplus","office":"지플러스","address":"AY39","row":38,"col":50,"text":"서비스UX/UI실","key":"서비스ux/ui실"},{"tab":"gplus","office":"지플러스","address":"BG39","row":38,"col":58,"text":"개발2실","key":"개발2실"},{"tab":"gplus","office":"지플러스","address":"BK39","row":38,"col":62,"text":"개발3실","key":"개발3실"},{"tab":"gplus","office":"지플러스","address":"BS39","row":38,"col":70,"text":"개발1실","key":"개발1실"},{"tab":"gplus","office":"지플러스","address":"AL40","row":39,"col":37,"text":"임지선","key":"임지선"},{"tab":"gplus","office":"지플러스","address":"AM40","row":39,"col":38,"text":"고은정","key":"고은정"},{"tab":"gplus","office":"지플러스","address":"AS40","row":39,"col":44,"text":"허민호","key":"허민호"},{"tab":"gplus","office":"지플러스","address":"AT40","row":39,"col":45,"text":"이동우","key":"이동우"},{"tab":"gplus","office":"지플러스","address":"AX40","row":39,"col":49,"text":"황수연","key":"황수연"},{"tab":"gplus","office":"지플러스","address":"AY40","row":39,"col":50,"text":"이선우","key":"이선우"},{"tab":"gplus","office":"지플러스","address":"BB40","row":39,"col":53,"text":"오유미","key":"오유미"},{"tab":"gplus","office":"지플러스","address":"BC40","row":39,"col":54,"text":"이정민C","key":"이정민c"},{"tab":"gplus","office":"지플러스","address":"BK40","row":39,"col":62,"text":"연지수","key":"연지수"},{"tab":"gplus","office":"지플러스","address":"BN40","row":39,"col":65,"text":"안재이","key":"안재이"},{"tab":"gplus","office":"지플러스","address":"BO40","row":39,"col":66,"text":"박유진B","key":"박유진b"},{"tab":"gplus","office":"지플러스","address":"BR40","row":39,"col":69,"text":"강수연","key":"강수연"},{"tab":"gplus","office":"지플러스","address":"BW40","row":39,"col":74,"text":"김은희","key":"김은희"},{"tab":"gplus","office":"지플러스","address":"V41","row":40,"col":21,"text":"사업대표실","key":"사업대표실"},{"tab":"gplus","office":"지플러스","address":"B43","row":42,"col":1,"text":"남자휴게실","key":"남자휴게실"},{"tab":"gplus","office":"지플러스","address":"AA43","row":42,"col":26,"text":"임원실 (허세영)","key":"임원실 (허세영)"},{"tab":"gplus","office":"지플러스","address":"AH43","row":42,"col":33,"text":"한상우","key":"한상우"},{"tab":"gplus","office":"지플러스","address":"AI43","row":42,"col":34,"text":"조송희","key":"조송희"},{"tab":"gplus","office":"지플러스","address":"AL43","row":42,"col":37,"text":"김민주C","key":"김민주c"},{"tab":"gplus","office":"지플러스","address":"AM43","row":42,"col":38,"text":"김수지","key":"김수지"},{"tab":"gplus","office":"지플러스","address":"AS43","row":42,"col":44,"text":"지청일","key":"지청일"},{"tab":"gplus","office":"지플러스","address":"AX43","row":42,"col":49,"text":"안수빈","key":"안수빈"},{"tab":"gplus","office":"지플러스","address":"AY43","row":42,"col":50,"text":"송다은","key":"송다은"},{"tab":"gplus","office":"지플러스","address":"BC43","row":42,"col":54,"text":"오다영","key":"오다영"},{"tab":"gplus","office":"지플러스","address":"BF43","row":42,"col":57,"text":"이석원","key":"이석원"},{"tab":"gplus","office":"지플러스","address":"BK43","row":42,"col":62,"text":"이대용","key":"이대용"},{"tab":"gplus","office":"지플러스","address":"BN43","row":42,"col":65,"text":"이수은","key":"이수은"},{"tab":"gplus","office":"지플러스","address":"BO43","row":42,"col":66,"text":"박현우","key":"박현우"},{"tab":"gplus","office":"지플러스","address":"BS43","row":42,"col":70,"text":"이동호","key":"이동호"},{"tab":"gplus","office":"지플러스","address":"BV43","row":42,"col":73,"text":"장상기","key":"장상기"},{"tab":"gplus","office":"지플러스","address":"BW43","row":42,"col":74,"text":"이세진","key":"이세진"},{"tab":"gplus","office":"지플러스","address":"AH46","row":45,"col":33,"text":"서진석","key":"서진석"},{"tab":"gplus","office":"지플러스","address":"AI46","row":45,"col":34,"text":"배용환","key":"배용환"},{"tab":"gplus","office":"지플러스","address":"AL46","row":45,"col":37,"text":"이수학","key":"이수학"},{"tab":"gplus","office":"지플러스","address":"AM46","row":45,"col":38,"text":"홍영경","key":"홍영경"},{"tab":"gplus","office":"지플러스","address":"AS46","row":45,"col":44,"text":"박용진","key":"박용진"},{"tab":"gplus","office":"지플러스","address":"AX46","row":45,"col":49,"text":"박현식","key":"박현식"},{"tab":"gplus","office":"지플러스","address":"AY46","row":45,"col":50,"text":"김용권","key":"김용권"},{"tab":"gplus","office":"지플러스","address":"BB46","row":45,"col":53,"text":"김진희","key":"김진희"},{"tab":"gplus","office":"지플러스","address":"BC46","row":45,"col":54,"text":"정혜진","key":"정혜진"},{"tab":"gplus","office":"지플러스","address":"BF46","row":45,"col":57,"text":"안예림","key":"안예림"},{"tab":"gplus","office":"지플러스","address":"BG46","row":45,"col":58,"text":"엄관용","key":"엄관용"},{"tab":"gplus","office":"지플러스","address":"BJ46","row":45,"col":61,"text":"박정언","key":"박정언"},{"tab":"gplus","office":"지플러스","address":"BK46","row":45,"col":62,"text":"박경도","key":"박경도"},{"tab":"gplus","office":"지플러스","address":"BN46","row":45,"col":65,"text":"이소라","key":"이소라"},{"tab":"gplus","office":"지플러스","address":"BO46","row":45,"col":66,"text":"곽한솔","key":"곽한솔"},{"tab":"gplus","office":"지플러스","address":"BR46","row":45,"col":69,"text":"김남현","key":"김남현"},{"tab":"gplus","office":"지플러스","address":"BS46","row":45,"col":70,"text":"연충욱","key":"연충욱"},{"tab":"gplus","office":"지플러스","address":"BV46","row":45,"col":73,"text":"이해성","key":"이해성"},{"tab":"gplus","office":"지플러스","address":"BW46","row":45,"col":74,"text":"장태진","key":"장태진"},{"tab":"gplus","office":"지플러스","address":"AH49","row":48,"col":33,"text":"배경근","key":"배경근"},{"tab":"gplus","office":"지플러스","address":"AL49","row":48,"col":37,"text":"문경화","key":"문경화"},{"tab":"gplus","office":"지플러스","address":"AM49","row":48,"col":38,"text":"김남준","key":"김남준"},{"tab":"gplus","office":"지플러스","address":"BA49","row":48,"col":52,"text":"김재중","key":"김재중"},{"tab":"gplus","office":"지플러스","address":"BF49","row":48,"col":57,"text":"가윤정","key":"가윤정"},{"tab":"gplus","office":"지플러스","address":"BJ49","row":48,"col":61,"text":"서상권","key":"서상권"},{"tab":"gplus","office":"지플러스","address":"BK49","row":48,"col":62,"text":"최연지","key":"최연지"},{"tab":"gplus","office":"지플러스","address":"BR49","row":48,"col":69,"text":"곽예찬","key":"곽예찬"},{"tab":"gplus","office":"지플러스","address":"BS49","row":48,"col":70,"text":"김지영C","key":"김지영c"}]</script>
+
+        <script id="cw-index-runtime-patch">
+        (() => {
+            'use strict';
+
             document.addEventListener('DOMContentLoaded', () => {
                 const dirContent = document.getElementById('dirContent');
-                const dirPanel = document.getElementById('dirPanel');
-                const toggleDirBtn = document.getElementById('toggleDirBtn');
+                const floorplan = document.getElementById('dynamicFloorplan');
 
-                /**
-                 * 수정 사항 1, 2, 3, 5: 부서 및 시설 항목 카테고리 이동 및 추가/제거
-                 */
+                const OFFICE_LABELS = {
+                    daerung: '대륭',
+                    woorim: '우림',
+                    dk18: '가산DK 18F',
+                    dk17: '가산DK 17F',
+                    gplus: '지플러스'
+                };
+
+                /* 배포 환경의 기존 표준 파일명을 우선하고, 현재 검토본 파일명도 fallback으로 지원 */
+                const OFFICE_FILES = {
+                    daerung: ['daerung.xlsx', 'daerung(4).xlsx', 'daerung(3).xlsx'],
+                    woorim: ['woorim.xlsx', 'woorim(4).xlsx', 'woorim(3).xlsx'],
+                    dk18: ['dk18.xlsx', 'dk18(3).xlsx', 'dk18(2).xlsx'],
+                    dk17: ['dk17.xlsx', 'dk17(3).xlsx', 'dk17(2).xlsx'],
+                    gplus: ['gplus.xlsx', 'gplus(3).xlsx', 'gplus(2).xlsx']
+                };
+
+                /* 전체 리스트 보정 규칙 */
                 const PATCH_RULES = {
-                    'daerung': { 
-                        facilities: ['실외기', 'A401', 'A601', 'A602', 'A603', 'B601', 'C801', 'C802'], 
-                        depts: [], 
-                        remove: [] 
+                    daerung: {
+                        facilities: ['A401', 'A601', 'A602', 'A603', 'B601', 'C801', 'C802'],
+                        depts: [],
+                        removeFacilities: ['실외기'],
+                        removeAll: []
                     },
-                    'woorim': { 
-                        facilities: ['401', '402', '601', '602', '603', '604', '실외기', '실외기실'], 
-                        depts: [], 
-                        remove: [] 
+                    woorim: {
+                        facilities: ['401', '402', '601', '602', '603', '604'],
+                        depts: [],
+                        removeFacilities: ['실외기', '실외기실'],
+                        removeAll: []
                     },
-                    'dk18': { 
-                        facilities: ['A1201'], 
-                        depts: ['커넥트파이낸스'], 
-                        remove: ['김성실'] 
+                    dk18: {
+                        facilities: ['A1201'],
+                        depts: ['커넥트파이낸스'],
+                        removeFacilities: [],
+                        removeAll: ['김성실']
                     },
-                    'dk17': { facilities: [], depts: [], remove: [] },
-                    'gplus': { 
-                        facilities: ['남자휴게실', '비즈센터 교육장', '샤워실(남)', '샤워실(여)', '세미나실', '여자휴게실', '휴게실', '카페테리아'], 
-                        depts: [], 
-                        remove: [] 
+                    dk17: { facilities: [], depts: [], removeFacilities: [], removeAll: [] },
+                    gplus: {
+                        facilities: ['남자휴게실', '비즈센터 교육장', '샤워실(남)', '샤워실(여)', '세미나실', '여자휴게실', '휴게실', '카페테리아'],
+                        depts: [],
+                        removeFacilities: [],
+                        removeAll: []
                     }
                 };
 
-                let isPatching = false;
-                
-                const applyDirectoryPatches = () => {
-                    if (isPatching || !dirContent) return;
-                    
-                    const activeBtn = document.querySelector('.tab-btn.bg-\\[\\#4F81BD\\]') || 
-                                      document.querySelector('.tab-btn.text-white');
-                    const tab = activeBtn ? activeBtn.dataset.tab : document.body.dataset.office;
-                    const rules = PATCH_RULES[tab];
-                    
-                    if (!rules) return;
+                const HORIZONTAL_EXACT = {
+                    daerung: new Set(['A401D', 'A401 D', 'A401', 'A801', 'B401', 'B601', 'B801', 'B802']),
+                    woorim: new Set(['사업관리팀', '제휴비즈니스팀', '셀피아팀', '마케팅팀']),
+                    dk18: new Set([
+                        'A1201', 'OA', 'OA존 (복합기, 정수기 외)', 'OA (복합기, 원두머신)',
+                        'TEST ROOM', 'Test room', '비상용 엘리베이터 A', '비상용 엘리베이터 B', '화물 엘리베이터'
+                    ]),
+                    dk17: new Set([]),
+                    gplus: new Set(['화물엘리베이터', '화물 엘리베이터', '분리수거공간', '엘리베이터 A', '엘리베이터 B', '엘리베이터A', '엘리베이터B'])
+                };
 
-                    isPatching = true; // 무한 루프 방지
+                const facilityNamesByTab = new Map();
+                let directoryPatching = false;
+                let floorplanPatchTimer = null;
+                let directoryPatchTimer = null;
 
-                    try {
-                        let deptTitle = null;
-                        let facTitle = null;
+                const normalizeText = (value) => String(value ?? '')
+                    .replace(/\u00a0/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
 
-                        // 텍스트 기반으로 정확하게 "부서 및 팀", "회의실 및 시설" 컨테이너 식별
-                        const walker = document.createTreeWalker(dirContent, NodeFilter.SHOW_TEXT, null, false);
+                const keyText = (value) => normalizeText(value).toLocaleLowerCase('ko-KR');
+
+                const getActiveTab = () => {
+                    const active = document.querySelector('.tab-btn.bg-\\[\\#4F81BD\\]') ||
+                                   document.querySelector('.tab-btn.text-white');
+                    return active?.dataset.tab || document.body.dataset.office || 'daerung';
+                };
+
+                const findSectionTitle = (label) => {
+                    if (!dirContent) return null;
+                    const walker = document.createTreeWalker(dirContent, NodeFilter.SHOW_TEXT);
+                    let node;
+                    while ((node = walker.nextNode())) {
+                        if (normalizeText(node.nodeValue) === label) return node.parentElement;
+                    }
+                    return null;
+                };
+
+                const getListContainer = (titleEl) => {
+                    if (!titleEl) return null;
+                    const directNext = titleEl.nextElementSibling;
+                    if (directNext && (directNext.matches('ul,.grid,.flex') || directNext.querySelector('button,li,[class*="cursor-pointer"]'))) {
+                        return directNext;
+                    }
+                    const parent = titleEl.parentElement;
+                    if (!parent) return null;
+                    return parent.querySelector('ul,.grid,.flex') || parent;
+                };
+
+                const getDirectorySections = () => {
+                    const deptTitle = findSectionTitle('부서 및 팀');
+                    const facTitle = findSectionTitle('회의실 및 시설');
+                    return {
+                        deptTitle,
+                        facTitle,
+                        deptContainer: getListContainer(deptTitle),
+                        facContainer: getListContainer(facTitle)
+                    };
+                };
+
+                const findItemWrappers = (root, wantedText) => {
+                    if (!root) return [];
+                    const wanted = normalizeText(wantedText);
+                    const matches = [];
+                    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+                    let node;
+                    while ((node = walker.nextNode())) {
+                        if (normalizeText(node.nodeValue) !== wanted) continue;
+                        let el = node.parentElement;
+                        while (el && el !== root) {
+                            if (el.matches('button,li,a,[class*="cursor-pointer"]')) break;
+                            if (el.parentElement === root) break;
+                            el = el.parentElement;
+                        }
+                        if (el && el !== root) matches.push(el);
+                    }
+                    return [...new Set(matches)];
+                };
+
+                const collectDirectoryNames = (container) => {
+                    const result = new Set();
+                    if (!container) return result;
+                    const items = container.querySelectorAll('button,li,a,[class*="cursor-pointer"]');
+                    if (items.length) {
+                        items.forEach(el => {
+                            const text = normalizeText(el.textContent);
+                            if (text && text !== '회의실 및 시설' && text !== '부서 및 팀') result.add(text);
+                        });
+                    } else {
+                        const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
                         let node;
                         while ((node = walker.nextNode())) {
-                            const text = node.nodeValue.trim();
-                            if (text === '부서 및 팀') {
-                                deptTitle = node.parentElement;
-                                while(deptTitle.parentElement && deptTitle.parentElement.parentElement !== dirContent && !['H2','H3','H4','DIV'].includes(deptTitle.tagName)) {
-                                    deptTitle = deptTitle.parentElement;
-                                }
-                            }
-                            if (text === '회의실 및 시설') {
-                                facTitle = node.parentElement;
-                                while(facTitle.parentElement && facTitle.parentElement.parentElement !== dirContent && !['H2','H3','H4','DIV'].includes(facTitle.tagName)) {
-                                    facTitle = facTitle.parentElement;
-                                }
-                            }
+                            const text = normalizeText(node.nodeValue);
+                            if (text && text !== '회의실 및 시설' && text !== '부서 및 팀') result.add(text);
+                        }
+                    }
+                    return result;
+                };
+
+                const ensureDirectoryItems = (names, targetContainer, otherContainer) => {
+                    if (!targetContainer || !names?.length) return;
+                    const target = targetContainer.querySelector('ul,.grid,.flex') || targetContainer;
+                    const sample = target.querySelector('button,li,a,[class*="cursor-pointer"]') ||
+                                   otherContainer?.querySelector('button,li,a,[class*="cursor-pointer"]');
+
+                    names.forEach(name => {
+                        const inTarget = findItemWrappers(targetContainer, name);
+                        if (inTarget.length) return;
+
+                        const inOther = findItemWrappers(otherContainer, name);
+                        if (inOther.length) {
+                            inOther.forEach(item => target.appendChild(item));
+                            return;
                         }
 
-                        // 헤더 다음에 오는 리스트 컨테이너(ul, grid 등) 찾기
-                        const getListContainer = (titleEl) => {
-                            if (!titleEl) return null;
-                            let next = titleEl.nextElementSibling;
-                            if (next && (next.tagName === 'UL' || next.classList.contains('grid') || next.classList.contains('flex'))) return next;
-                            if (titleEl.parentElement && titleEl.parentElement.children.length > 1) {
-                                let container = titleEl.parentElement.querySelector('ul, .grid, .flex');
-                                if (container && container !== titleEl) return container;
+                        if (!sample) return;
+                        const clone = sample.cloneNode(true);
+                        const textCandidates = [...clone.querySelectorAll('*')].filter(el =>
+                            el.childNodes.length === 1 &&
+                            el.childNodes[0].nodeType === Node.TEXT_NODE &&
+                            normalizeText(el.textContent)
+                        );
+                        if (textCandidates.length) textCandidates[textCandidates.length - 1].textContent = name;
+                        else clone.textContent = name;
+
+                        clone.addEventListener('click', e => {
+                            e.stopPropagation();
+                            const input = document.getElementById('searchInput');
+                            if (input) {
+                                input.value = name;
+                                input.dispatchEvent(new Event('input', { bubbles: true }));
+                                input.focus();
                             }
-                            return titleEl.parentElement;
-                        };
+                        });
+                        target.appendChild(clone);
+                    });
+                };
 
-                        let deptContainer = getListContainer(deptTitle);
-                        let facContainer = getListContainer(facTitle);
+                const patchDirectory = () => {
+                    if (!dirContent || directoryPatching) return;
+                    const tab = getActiveTab();
+                    const rules = PATCH_RULES[tab];
+                    if (!rules) return;
 
-                        // 아이템 찾기 함수
-                        const findItemElements = (text) => {
-                            const matches = [];
-                            const itemWalker = document.createTreeWalker(dirContent, NodeFilter.SHOW_TEXT, null, false);
-                            let itemNode;
-                            while ((itemNode = itemWalker.nextNode())) {
-                                if (itemNode.nodeValue.trim() === text) {
-                                    matches.push(itemNode.parentElement);
-                                }
-                            }
-                            
-                            return matches.map(el => {
-                                let wrapper = el;
-                                while(wrapper.parentElement && wrapper.parentElement !== deptContainer && wrapper.parentElement !== facContainer && wrapper.parentElement !== dirContent) {
-                                    if (wrapper.tagName === 'BUTTON' || wrapper.tagName === 'LI' || wrapper.classList.contains('cursor-pointer') || wrapper.tagName === 'A') {
-                                        return wrapper;
-                                    }
-                                    wrapper = wrapper.parentElement;
-                                }
-                                return wrapper;
-                            });
-                        };
+                    directoryPatching = true;
+                    try {
+                        const { deptContainer, facContainer } = getDirectorySections();
+                        if (!deptContainer && !facContainer) return;
 
-                        // 1. 항목 제거 (예: 김성실)
-                        rules.remove.forEach(name => {
-                            findItemElements(name).forEach(item => item.remove());
+                        rules.removeAll.forEach(name => {
+                            findItemWrappers(dirContent, name).forEach(item => item.remove());
+                        });
+                        rules.removeFacilities.forEach(name => {
+                            findItemWrappers(facContainer, name).forEach(item => item.remove());
                         });
 
-                        // 2. 카테고리 할당 (이동 및 생성)
-                        const ensureItems = (names, container, otherContainer) => {
-                            if (!container || names.length === 0) return;
-                            let target = container.querySelector('.grid, ul, .flex') || container;
-                            
-                            const existingItem = target.querySelector('button, li, div.cursor-pointer') || 
-                                                 (otherContainer && otherContainer.querySelector('button, li, div.cursor-pointer'));
-                            
-                            names.forEach(name => {
-                                const items = findItemElements(name);
-                                if (items.length > 0) {
-                                    // 기존 아이템이 있다면 목표 카테고리로 이동
-                                    items.forEach(item => {
-                                        if (!target.contains(item)) target.appendChild(item);
-                                    });
-                                } else if (existingItem) {
-                                    // 기존 리스트에 없다면 새 항목 생성 (예: 우림 401호, 커넥트파이낸스)
-                                    const clone = existingItem.cloneNode(true);
-                                    const textNodes = Array.from(clone.querySelectorAll('*')).filter(el => 
-                                        el.childNodes.length === 1 && el.childNodes[0].nodeType === 3 && el.textContent.trim().length > 0
-                                    );
-                                    if (textNodes.length > 0) {
-                                        textNodes[textNodes.length - 1].textContent = name;
-                                    } else {
-                                        clone.textContent = name;
-                                    }
-                                    
-                                    // 검색바와 연동하여 커스텀 클릭 이벤트 지정
-                                    clone.addEventListener('click', (e) => {
-                                        e.stopPropagation();
-                                        const searchInput = document.getElementById('searchInput');
-                                        if(searchInput) {
-                                            searchInput.value = name;
-                                            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                            searchInput.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, keyCode: 13, key: 'Enter' }));
-                                            searchInput.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, keyCode: 13, key: 'Enter' }));
-                                        }
-                                    });
-                                    target.appendChild(clone);
-                                }
-                            });
-                        };
+                        ensureDirectoryItems(rules.facilities, facContainer, deptContainer);
+                        ensureDirectoryItems(rules.depts, deptContainer, facContainer);
 
-                        ensureItems(rules.facilities, facContainer, deptContainer);
-                        ensureItems(rules.depts, deptContainer, facContainer);
-
-                    } catch(e) {
-                        console.error("Directory Patching Error:", e);
+                        const names = collectDirectoryNames(facContainer);
+                        rules.removeFacilities.forEach(name => names.delete(name));
+                        facilityNamesByTab.set(tab, names);
                     } finally {
-                        isPatching = false;
+                        directoryPatching = false;
                     }
+                    scheduleFloorplanPatch();
                 };
 
-                // app.js가 dirContent를 렌더링(업데이트)할 때마다 변경 사항 적용 감지
-                const observer = new MutationObserver((mutations) => {
-                    let shouldPatch = false;
-                    for (let m of mutations) {
-                        if (m.addedNodes.length > 0) {
-                            shouldPatch = true;
-                            break;
-                        }
-                    }
-                    if (shouldPatch) {
-                        setTimeout(applyDirectoryPatches, 100);
-                    }
-                });
-
-                if (dirContent) {
-                    observer.observe(dirContent, { childList: true, subtree: true });
-                    // 초기 로드 대비 수동 1회 실행
-                    setTimeout(applyDirectoryPatches, 300);
-                }
-
-                // 실시간 검색 패치: 입력창에 타이핑 시 즉각적으로 검색(엔터 이벤트) 발생
-                const searchInput = document.getElementById('searchInput');
-                if (searchInput) {
-                    let searchTimeout;
-                    searchInput.addEventListener('input', function(e) {
-                        // 스크립트로 강제 발생시킨 이벤트일 경우 무한루프 방지를 위해 제외
-                        if (!e.isTrusted) return;
-                        
-                        clearTimeout(searchTimeout);
-                        searchTimeout = setTimeout(() => {
-                            const enterDownEvent = new KeyboardEvent('keydown', {
-                                bubbles: true, cancelable: true, keyCode: 13, key: 'Enter'
-                            });
-                            const enterUpEvent = new KeyboardEvent('keyup', {
-                                bubbles: true, cancelable: true, keyCode: 13, key: 'Enter'
-                            });
-                            searchInput.dispatchEvent(enterDownEvent);
-                            searchInput.dispatchEvent(enterUpEvent);
-                        }, 150); // 0.15초 대기 후 자동 실행 (타이핑 과부하 방지)
-                    });
-                }
-
-                // 1, 2번 수정 사항: 특정 텍스트 세로 표기 처리
-                const floorplanContainer = document.getElementById('dynamicFloorplan');
-                const verticalTargets = ["사업관리팀", "제휴비즈니스팀", "셀피아팀", "마케팅팀", "김성실"];
-                
-                const applyVerticalText = () => {
-                    if (!floorplanContainer) return;
-                    const tds = floorplanContainer.querySelectorAll('td');
-                    tds.forEach(td => {
-                        if (!td.dataset.verticalApplied) {
-                            const text = td.textContent.trim(); 
-                            let applyVertical = verticalTargets.includes(text);
-                            
-                            // 특수 케이스: "품질관리팀"은 지도상 2곳에 존재함 (왼쪽 좁은 구역, 오른쪽 넓은 구역)
-                            // 가로로 넓게 병합된 셀(colSpan > 1)은 가로 표기 유지, 좁거나 세로로 긴 셀은 세로 표기 적용
-                            if (text === "품질관리팀") {
-                                if (td.colSpan > 1) {
-                                    applyVertical = false; // 오른쪽 하단의 가로 영역
-                                } else {
-                                    applyVertical = true;  // 왼쪽의 세로 영역
-                                }
-                            }
-
-                            // 대상 목록에 포함된 텍스트일 경우 세로 표기로 변환
-                            if (applyVertical) {
-                                td.innerHTML = text.split('').join('<br>');
-                                td.dataset.verticalApplied = "true"; // 중복 적용 방지
-                                td.style.lineHeight = "1.15";
-                                td.style.padding = "2px 0";
-                            }
-                        }
-                    });
+                const scheduleDirectoryPatch = () => {
+                    clearTimeout(directoryPatchTimer);
+                    directoryPatchTimer = setTimeout(patchDirectory, 80);
                 };
 
-                // 배치도가 업데이트 될 때마다 세로 표기 함수 실행
-                if (floorplanContainer) {
-                    const floorplanObserver = new MutationObserver(() => {
-                        applyVerticalText();
-                    });
-                    floorplanObserver.observe(floorplanContainer, { childList: true, subtree: true });
-                    // 초기 로드 대비 수동 1회 실행
-                    setTimeout(applyVerticalText, 500);
-                }
+                const isFacilityHeuristic = (text) => {
+                    return /(회의실|라운지|엘리베이터|화장실|휴게실|샤워실|세미나실|교육장|카페테리아|창고|출입문|OA|TEST ROOM|Test room|복합기|정수기|원두머신|비상계단|분리수거)/i.test(text);
+                };
 
-                // --- 실시간 검색 (한국어 IME 조합 중 즉각 반응 패치) ---
-                const searchInputBox = document.getElementById('searchInput');
-                if (searchInputBox) {
-                    let liveSearchTimer;
-                    
-                    const forceSearch = () => {
-                        // 1. 기존 스크립트가 composition(조합) 중단만 기다릴 경우를 대비해 end 이벤트 강제 발생
-                        searchInputBox.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
-                        
-                        // 2. keyup 이벤트 발생 (한국어 입력 중 발생하는 keyCode 229를 무시하는 기존 로직 우회용)
-                        const fakeKeyup = new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'a', keyCode: 65 });
-                        Object.defineProperty(fakeKeyup, 'keyCode', { get: () => 65 });
-                        Object.defineProperty(fakeKeyup, 'which', { get: () => 65 });
-                        searchInputBox.dispatchEvent(fakeKeyup);
-                        
-                        // 3. 엔터키(Enter) 이벤트 추가 발생
-                        const enterKeyup = new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'Enter', keyCode: 13 });
-                        Object.defineProperty(enterKeyup, 'keyCode', { get: () => 13 });
-                        Object.defineProperty(enterKeyup, 'which', { get: () => 13 });
-                        searchInputBox.dispatchEvent(enterKeyup);
+                /* 전체 리스트를 index 자체에서 구성: app.js가 비우거나 렌더하지 못해도 항상 표시 */
+                let embeddedDirectoryIndex = null;
+                const getEmbeddedDirectoryIndex = () => {
+                    if (embeddedDirectoryIndex) return embeddedDirectoryIndex;
+                    try {
+                        const el = document.getElementById('cw-embedded-search-index');
+                        const parsed = JSON.parse(el?.textContent || '[]');
+                        embeddedDirectoryIndex = Array.isArray(parsed) ? parsed : [];
+                    } catch (_) { embeddedDirectoryIndex = []; }
+                    return embeddedDirectoryIndex;
+                };
+                const DIRECTORY_EXCLUDES = new Set(['0','1','A','B','C','D','E','F','G','회의실 및 시설','부서 및 팀']);
+                const DIRECTORY_EXCLUDES_BY_TAB = {
+                    daerung:new Set(['실외기','실외기실']), woorim:new Set(['실외기','실외기실']),
+                    dk18:new Set(['김성실']), dk17:new Set([]), gplus:new Set([])
+                };
+                const isRoomCode = (tab, text) => {
+                    const compact = normalizeText(text).replace(/\s+/g,'').toUpperCase();
+                    if (!compact) return false;
+                    if (tab==='daerung') return /^[A-C]\d{3}[A-Z]?$/.test(compact);
+                    if (tab==='woorim') return /^(?:401|402|601|602|603|604|605|801)$/.test(compact);
+                    if (tab==='dk18') return /^[AB]\d{3,4}$/.test(compact) || compact==='A1201';
+                    if (tab==='dk17') return /^[AB]\d{3,4}$/.test(compact);
+                    return false;
+                };
+                const isDepartmentName = (text) => {
+                    const value=normalizeText(text);
+                    if (!value || value.length>35 || isFacilityHeuristic(value)) return false;
+                    if (/(대표실|임원실|시스템실|메일룸|탕비실|치카룸|수면실|응접실)$/i.test(value)) return false;
+                    return /(팀|본부|센터|파트|그룹|사업부|사업본부|TF|실)$/i.test(value);
+                };
+                const buildDirectoryData = (tab) => {
+                    const source=new Set();
+                    floorplan?.querySelectorAll('td').forEach(td=>{
+                        const label=td.querySelector(':scope > .cw-cell-label');
+                        const text=normalizeText(label?.textContent || td.dataset.cwLoungeLabel || td.textContent);
+                        if(text) source.add(text);
+                    });
+                    getEmbeddedDirectoryIndex().filter(item=>item?.tab===tab).forEach(item=>{
+                        const text=normalizeText(item?.text); if(text) source.add(text);
+                    });
+                    const excluded=DIRECTORY_EXCLUDES_BY_TAB[tab]||new Set();
+                    const facilities=new Set(), departments=new Set();
+                    source.forEach(raw=>{
+                        const text=normalizeText(raw);
+                        if(!text || DIRECTORY_EXCLUDES.has(text) || excluded.has(text)) return;
+                        if(/^[-+]?\d+(?:\.\d+)?$/.test(text) && !isRoomCode(tab,text)) return;
+                        const facility=isFacilityHeuristic(text)||isRoomCode(tab,text)||/^(?:메일룸|탕비실|프로젝트룸|임원실|부문대표실|총괄대표실|사업대표실|대표실|시스템실|GA창고|공용창고|오픈형 창고)$/i.test(text);
+                        if(facility) facilities.add(text); else if(isDepartmentName(text)) departments.add(text);
+                    });
+                    const rules=PATCH_RULES[tab];
+                    rules?.facilities?.forEach(n=>{if(!excluded.has(n)) facilities.add(n)});
+                    rules?.depts?.forEach(n=>departments.add(n));
+                    rules?.removeFacilities?.forEach(n=>facilities.delete(n));
+                    rules?.removeAll?.forEach(n=>{facilities.delete(n);departments.delete(n)});
+                    const sorter=(a,b)=>a.localeCompare(b,'ko',{numeric:true,sensitivity:'base'});
+                    return {departments:[...departments].sort(sorter),facilities:[...facilities].sort(sorter)};
+                };
+                const activateDirectoryItem=(name)=>{
+                    const input=document.getElementById('searchInput'); if(!input) return;
+                    input.value=name; input.dispatchEvent(new Event('input',{bubbles:true})); input.focus();
+                };
+                const createDirectorySection=(title,names,kind)=>{
+                    const section=document.createElement('section'); section.className='cw-dir-section'; section.dataset.kind=kind;
+                    const heading=document.createElement('div'); heading.className='cw-dir-title';
+                    const label=document.createElement('span'); label.textContent=title;
+                    const count=document.createElement('span'); count.className='cw-dir-count'; count.textContent=String(names.length);
+                    heading.append(label,count);
+                    const list=document.createElement('div'); list.className='cw-dir-list';
+                    if(!names.length){const empty=document.createElement('div');empty.className='cw-dir-empty';empty.textContent='표시할 항목이 없습니다.';list.appendChild(empty);}
+                    else names.forEach(name=>{const btn=document.createElement('button');btn.type='button';btn.className='cw-dir-item';btn.textContent=name;btn.dataset.directoryName=name;btn.addEventListener('click',()=>activateDirectoryItem(name));list.appendChild(btn);});
+                    section.append(heading,list); return section;
+                };
+                const renderDirectoryContent=()=>{
+                    if(!dirContent) return; const tab=getActiveTab(); const {departments,facilities}=buildDirectoryData(tab);
+                    dirContent.replaceChildren(createDirectorySection('부서 및 팀',departments,'department'),createDirectorySection('회의실 및 시설',facilities,'facility'));
+                    facilityNamesByTab.set(tab,new Set(facilities));
+                };
+                const directoryHasSections=()=>!!findSectionTitle('부서 및 팀') && !!findSectionTitle('회의실 및 시설');
+                const ensureDirectoryRendered=()=>{if(dirContent && !directoryHasSections()) renderDirectoryContent();};
+
+                const shouldForceHorizontal = (tab, text) => {
+                    const exact = HORIZONTAL_EXACT[tab];
+                    if (exact?.has(text)) return true;
+                    const compact = text.replace(/\s+/g, '');
+                    /* 대륭의 회의실 코드(A401/B802/A801 등)는 모두 가로표기 */
+                    if (tab === 'daerung' && /^[A-C]\d{3}[A-Z]?$/.test(compact)) return true;
+                    if (tab === 'woorim' && /^(?:사업관리팀|제휴비즈니스팀|셀피아팀|마케팅팀)$/.test(compact)) return true;
+                    if (tab === 'dk18' && (/^(?:A1201|Testroom|TESTROOM)$/.test(compact) || /^OA(?:존.*)?$/i.test(compact) || /^비상용엘리베이터[AB]$/i.test(compact))) return true;
+                    if (tab === 'gplus' && /^(?:화물엘리베이터|분리수거공간|엘리베이터A|엘리베이터B)$/.test(compact)) return true;
+                    return false;
+                };
+
+                /* 우림의 아래 4개 항목은 '시설'이 아니라 팀명이다.
+                   가로 표기는 유지하되 일반 부서/팀과 동일한 글씨 크기를 사용한다. */
+                const isWoorimNormalTeamLabel = (tab, text) => {
+                    if (tab !== 'woorim') return false;
+                    const compact = normalizeText(text).replace(/\s+/g, '');
+                    return /^(?:사업관리팀|제휴비즈니스팀|셀피아팀|마케팅팀)$/.test(compact);
+                };
+
+                const ensureCellLabel = (td, text, forceHorizontal = false) => {
+                    if (!td || !text) return null;
+                    let label = td.querySelector(':scope > .cw-cell-label');
+                    if (!label) {
+                        td.replaceChildren();
+                        label = document.createElement('span');
+                        label.className = 'cw-cell-label';
+                        td.appendChild(label);
+                    }
+                    if (label.textContent !== text) label.textContent = text;
+                    label.classList.toggle('cw-nowrap-label', !!forceHorizontal);
+                    label.style.whiteSpace = forceHorizontal ? 'nowrap' : 'normal';
+                    label.style.wordBreak = forceHorizontal ? 'normal' : 'keep-all';
+                    label.style.overflowWrap = forceHorizontal ? 'normal' : 'break-word';
+                    return label;
+                };
+
+                /*
+                 * 시설/회의실 글씨는 가능한 크게 시작한 뒤 실제 셀 영역을 넘는 순간까지 0.5px씩 줄인다.
+                 * 강제 가로표기 항목은 절대 줄바꿈하지 않고 한 줄 안에서 맞춘다.
+                 */
+                const fitCellText = (td, text, forceHorizontal, preferredMaxPx) => {
+                    if (!td || !td.isConnected || !text) return;
+                    const label = ensureCellLabel(td, text, forceHorizontal);
+                    if (!label) return;
+
+                    const availableWidth = Math.max(4, td.clientWidth - 6);
+                    const availableHeight = Math.max(4, td.clientHeight - 4);
+                    const maxSize = Math.max(8, Math.min(20, preferredMaxPx || 16));
+                    const minSize = 6.5;
+                    let size = maxSize;
+
+                    label.style.fontSize = `${size}px`;
+                    label.style.maxWidth = `${availableWidth}px`;
+                    label.style.maxHeight = `${availableHeight}px`;
+
+                    let guard = 0;
+                    const overflows = () => label.scrollWidth > availableWidth + 1 || label.scrollHeight > availableHeight + 1;
+                    while (size > minSize && guard < 30 && overflows()) {
+                        size -= 0.5;
+                        label.style.fontSize = `${size}px`;
+                        guard += 1;
+                    }
+
+                    td.style.fontSize = `${size}px`;
+                };
+
+                /*
+                 * 하나의 라운지 공간이 여러 병합 셀로 나뉘어 같은 명칭이 반복되는 경우,
+                 * 서로 맞닿은 동일 라운지 셀을 한 영역으로 보고 가장 큰 셀에만 명칭을 남긴다.
+                 * 라운지가 서로 떨어져 있으면 각각 한 번씩 표시된다.
+                 */
+                const dedupeLoungeLabels = () => {
+                    if (!floorplan) return;
+
+                    const loungeCells = [...floorplan.querySelectorAll('td.cw-lounge-cell')]
+                        .map(td => {
+                            const label = normalizeText(td.dataset.cwLoungeLabel || td.textContent);
+                            if (!label || !label.includes('라운지')) return null;
+                            if (!td.dataset.cwLoungeLabel) td.dataset.cwLoungeLabel = label;
+                            const rect = td.getBoundingClientRect();
+                            return {
+                                td,
+                                label,
+                                rect,
+                                area: Math.max(1, rect.width * rect.height)
+                            };
+                        })
+                        .filter(Boolean);
+
+                    if (loungeCells.length < 2) return;
+
+                    const byLabel = new Map();
+                    loungeCells.forEach(item => {
+                        if (!byLabel.has(item.label)) byLabel.set(item.label, []);
+                        byLabel.get(item.label).push(item);
+                    });
+
+                    const overlapLength = (a1, a2, b1, b2) => Math.min(a2, b2) - Math.max(a1, b1);
+                    const cellsTouch = (a, b) => {
+                        const tolerance = 3;
+                        const verticalOverlap = overlapLength(a.rect.top, a.rect.bottom, b.rect.top, b.rect.bottom);
+                        const horizontalOverlap = overlapLength(a.rect.left, a.rect.right, b.rect.left, b.rect.right);
+                        const horizontalTouch = verticalOverlap > 1 && (
+                            Math.abs(a.rect.right - b.rect.left) <= tolerance ||
+                            Math.abs(b.rect.right - a.rect.left) <= tolerance
+                        );
+                        const verticalTouch = horizontalOverlap > 1 && (
+                            Math.abs(a.rect.bottom - b.rect.top) <= tolerance ||
+                            Math.abs(b.rect.bottom - a.rect.top) <= tolerance
+                        );
+                        const overlaps = verticalOverlap > 1 && horizontalOverlap > 1;
+                        return overlaps || horizontalTouch || verticalTouch;
                     };
 
-                    searchInputBox.addEventListener('input', (e) => {
-                        if (!e.isTrusted) return; // 무한루프 방지
-                        
-                        clearTimeout(liveSearchTimer);
-                        // 타이핑 디바운싱: 0.15초 대기 후 강제로 검색 이벤트를 실행
-                        liveSearchTimer = setTimeout(forceSearch, 150);
+                    byLabel.forEach(items => {
+                        const visited = new Set();
+
+                        items.forEach((item, startIndex) => {
+                            if (visited.has(startIndex)) return;
+
+                            const stack = [startIndex];
+                            const component = [];
+                            visited.add(startIndex);
+
+                            while (stack.length) {
+                                const currentIndex = stack.pop();
+                                const current = items[currentIndex];
+                                component.push(current);
+
+                                items.forEach((candidate, candidateIndex) => {
+                                    if (visited.has(candidateIndex)) return;
+                                    if (cellsTouch(current, candidate)) {
+                                        visited.add(candidateIndex);
+                                        stack.push(candidateIndex);
+                                    }
+                                });
+                            }
+
+                            /* 넓은 병합 셀을 대표 라벨 위치로 사용하면 가독성이 가장 좋음 */
+                            const representative = component.reduce((best, current) =>
+                                current.area > best.area ? current : best
+                            );
+
+                            component.forEach(current => {
+                                const shouldShow = current === representative;
+                                const currentText = normalizeText(current.td.textContent);
+                                if (shouldShow) {
+                                    delete current.td.dataset.cwLoungeHidden;
+                                    ensureCellLabel(current.td, current.label, false);
+                                    current.td.setAttribute('aria-label', current.label);
+                                    current.td.dataset.cwLoungeRepresentative = 'true';
+                                } else {
+                                    current.td.dataset.cwLoungeHidden = 'true';
+                                    if (current.td.childNodes.length) current.td.replaceChildren();
+                                    current.td.removeAttribute('aria-label');
+                                    delete current.td.dataset.cwLoungeRepresentative;
+                                }
+                            });
+                        });
                     });
+                };
+
+                const patchFloorplan = () => {
+                    if (!floorplan) return;
+                    const tab = getActiveTab();
+                    const facilityNames = facilityNamesByTab.get(tab) || new Set();
+                    const baseFont = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--seat-font-size')) || 10;
+                    const cells = floorplan.querySelectorAll('td');
+
+                    cells.forEach(td => {
+                        const storedLoungeLabel = normalizeText(td.dataset.cwLoungeLabel || '');
+                        const existingLabel = td.querySelector(':scope > .cw-cell-label');
+                        let text = normalizeText(existingLabel?.textContent || td.textContent) || storedLoungeLabel;
+                        if (!text) return;
+
+                        const forceHorizontal = shouldForceHorizontal(tab, text);
+                        const isNormalTeamHorizontal = isWoorimNormalTeamLabel(tab, text);
+                        if (forceHorizontal) td.classList.add('cw-force-horizontal');
+
+                        /* 가로 고정 대상은 기존 <br>, block span, writing-mode 영향을 없애고 전용 span으로 재구성 */
+                        if (forceHorizontal) {
+                            ensureCellLabel(td, text, true);
+                        }
+
+                        /* 우림 4개 팀명은 가로표기 대상이지만 시설로 분류하지 않는다. */
+                        const isFacility = (!isNormalTeamHorizontal && forceHorizontal) || facilityNames.has(text) || isFacilityHeuristic(text);
+                        td.classList.toggle('cw-facility-cell', !!isFacility);
+
+                        if (isNormalTeamHorizontal) {
+                            const label = ensureCellLabel(td, text, true);
+                            td.style.fontSize = `${baseFont}px`;
+                            if (label) {
+                                label.style.fontSize = `${baseFont}px`;
+                                label.style.maxWidth = `${Math.max(4, td.clientWidth - 6)}px`;
+                                label.style.maxHeight = `${Math.max(4, td.clientHeight - 4)}px`;
+                            }
+                        }
+
+                        if (text.includes('라운지')) {
+                            td.classList.add('cw-lounge-cell');
+                            if (!td.dataset.cwLoungeLabel) td.dataset.cwLoungeLabel = text;
+                        }
+                        if (/비상\s*계단/.test(text)) td.classList.add('cw-emergency-stair-cell');
+
+                        /* 라운지 중복 숨김 셀은 라벨을 다시 만들지 않음 */
+                        if (td.dataset.cwLoungeHidden === 'true') return;
+
+                        if (isFacility || (forceHorizontal && !isNormalTeamHorizontal)) {
+                            /* 시설은 팀/부서보다 확실히 크게: 최대 18px에서 시작해 셀에 맞게 자동 축소 */
+                            const preferred = Math.max(baseFont + 4, 18);
+                            fitCellText(td, text, forceHorizontal, preferred);
+                        }
+                    });
+
+                    requestAnimationFrame(dedupeLoungeLabels);
+                };
+
+                const scheduleFloorplanPatch = () => {
+                    clearTimeout(floorplanPatchTimer);
+                    floorplanPatchTimer = setTimeout(() => requestAnimationFrame(patchFloorplan), 60);
+                };
+
+                if (dirContent) {
+                    let directoryRestoreTimer = null;
+                    new MutationObserver(() => {
+                        scheduleDirectoryPatch();
+                        clearTimeout(directoryRestoreTimer);
+                        directoryRestoreTimer = setTimeout(() => {
+                            const btn = document.getElementById('toggleDirBtn');
+                            if (btn?.getAttribute('aria-expanded') === 'true' && !directoryHasSections()) renderDirectoryContent();
+                        }, 90);
+                    }).observe(dirContent, { childList: true, subtree: true });
+                    scheduleDirectoryPatch();
+                }
+
+                const dirPanel = document.getElementById('dirPanel');
+                const toggleDirBtn = document.getElementById('toggleDirBtn');
+                if (dirPanel && toggleDirBtn) {
+                    const applyDirectoryState = (open) => {
+                        dirPanel.classList.toggle('hidden', !open);
+                        dirPanel.style.display = open ? 'block' : 'none';
+                        toggleDirBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                        if (open) {
+                            renderDirectoryContent();
+                            scheduleDirectoryPatch();
+                            setTimeout(() => { ensureDirectoryRendered(); scheduleDirectoryPatch(); }, 120);
+                            setTimeout(ensureDirectoryRendered, 260);
+                        }
+                        window.dispatchEvent(new Event('resize'));
+                    };
+
+                    /* 초기 상태를 명확히 고정 */
+                    applyDirectoryState(false);
+
+                    /*
+                     * app.js에도 같은 버튼의 click 핸들러가 존재하므로 capture 단계에서
+                     * 사용자가 의도한 '다음 상태'를 먼저 기억한다. 이후 app.js가 리스트를
+                     * 렌더링/토글하도록 두고, 마지막에 좌측 사이드바 상태만 확정한다.
+                     * 이렇게 해야 app.js와 index 보정 코드가 서로 한 번씩 토글해 다시 닫히는
+                     * 현상을 방지할 수 있다.
+                     */
+                    toggleDirBtn.addEventListener('click', () => {
+                        const wasOpen = toggleDirBtn.getAttribute('aria-expanded') === 'true';
+                        const shouldOpen = !wasOpen;
+                        setTimeout(() => {
+                            applyDirectoryState(shouldOpen);
+                            /* app.js의 렌더가 한 프레임 늦게 끝나는 경우까지 보정 */
+                            if (shouldOpen) {
+                                requestAnimationFrame(() => applyDirectoryState(true));
+                                setTimeout(() => applyDirectoryState(true), 120);
+                            }
+                        }, 0);
+                    }, true);
+                }
+                if (floorplan) {
+                    new MutationObserver(scheduleFloorplanPatch).observe(floorplan, { childList: true, subtree: true });
+                    scheduleFloorplanPatch();
+                }
+
+                document.querySelectorAll('.tab-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        setTimeout(() => {
+                            if (toggleDirBtn?.getAttribute('aria-expanded') === 'true') { renderDirectoryContent(); ensureDirectoryRendered(); }
+                            scheduleDirectoryPatch();
+                            scheduleFloorplanPatch();
+                        }, 140);
+                    });
+                });
+
+                ['fontDecreaseBtn', 'fontResetBtn', 'fontIncreaseBtn'].forEach(id => {
+                    document.getElementById(id)?.addEventListener('click', () => setTimeout(scheduleFloorplanPatch, 50));
+                });
+
+                /* -------------------- 모바일/웹 공통 안정 검색 -------------------- */
+                const setupStableSearch = () => {
+                    const oldInput = document.getElementById('searchInput');
+                    const oldClear = document.getElementById('clearSearchBtn');
+                    const oldPopup = document.getElementById('searchPopup');
+                    const searchBox = document.getElementById('searchBox');
+                    if (!oldInput || !oldPopup || !searchBox) return;
+
+                    /* 기존 search.js가 등록한 키/조합 이벤트를 제거하기 위해 노드를 교체하고 독립적으로 제어 */
+                    const input = oldInput.cloneNode(true);
+                    oldInput.replaceWith(input);
+                    input.placeholder = '이름 또는 부서 검색 (동명이인은 풀네임 입력 후 선택)';
+                    input.setAttribute('autocomplete', 'off');
+                    input.setAttribute('autocorrect', 'off');
+                    input.setAttribute('spellcheck', 'false');
+
+                    let clearBtn = oldClear;
+                    if (oldClear) {
+                        clearBtn = oldClear.cloneNode(true);
+                        oldClear.replaceWith(clearBtn);
+                    }
+
+                    const popup = oldPopup.cloneNode(false);
+                    oldPopup.replaceWith(popup);
+                    popup.innerHTML = '<div id="searchSummary" role="status" aria-live="polite"></div><div id="searchResults" role="listbox" aria-label="검색 결과"></div>';
+                    popup.hidden = true;
+                    searchBox.appendChild(popup);
+
+                    const summary = popup.querySelector('#searchSummary');
+                    const resultsEl = popup.querySelector('#searchResults');
+                    let searchIndex = [];
+                    try {
+                        const embeddedEl = document.getElementById('cw-embedded-search-index');
+                        const embedded = embeddedEl ? JSON.parse(embeddedEl.textContent || '[]') : [];
+                        if (Array.isArray(embedded)) searchIndex = embedded;
+                    } catch (err) {
+                        console.warn('[통합검색] 내장 검색 인덱스 로드 실패', err);
+                    }
+                    let isComposing = false;
+                    let highlightedIndex = -1;
+                    let loadFinished = searchIndex.length > 0;
+
+                    const fetchFirstAvailable = async (candidates) => {
+                        for (const file of candidates) {
+                            try {
+                                const response = await fetch(file, { cache: 'no-store' });
+                                if (response.ok) return { file, buffer: await response.arrayBuffer() };
+                            } catch (_) { /* 다음 후보 시도 */ }
+                        }
+                        return null;
+                    };
+
+                    const buildSearchIndex = async () => {
+                        if (!window.XLSX) {
+                            await new Promise(resolve => {
+                                const started = Date.now();
+                                const timer = setInterval(() => {
+                                    if (window.XLSX || Date.now() - started > 5000) {
+                                        clearInterval(timer);
+                                        resolve();
+                                    }
+                                }, 100);
+                            });
+                        }
+                        if (!window.XLSX) {
+                            loadFinished = true;
+                            return;
+                        }
+
+                        const all = [];
+                        const loadedTabs = new Set();
+                        await Promise.all(Object.entries(OFFICE_FILES).map(async ([tab, files]) => {
+                            const loaded = await fetchFirstAvailable(files);
+                            if (!loaded) return;
+                            try {
+                                const wb = XLSX.read(loaded.buffer, { type: 'array', cellText: true });
+                                const sheetName = wb.SheetNames[0];
+                                const ws = wb.Sheets[sheetName];
+                                if (!ws?.['!ref']) return;
+                                const range = XLSX.utils.decode_range(ws['!ref']);
+                                loadedTabs.add(tab);
+                                for (let r = range.s.r; r <= range.e.r; r++) {
+                                    for (let c = range.s.c; c <= range.e.c; c++) {
+                                        const address = XLSX.utils.encode_cell({ r, c });
+                                        const cell = ws[address];
+                                        if (!cell) continue;
+                                        const text = normalizeText(cell.w ?? cell.v);
+                                        if (!text || text === '0' || text === '1' || /^[-+]?\d+(\.\d+)?$/.test(text)) continue;
+                                        all.push({
+                                            tab,
+                                            office: OFFICE_LABELS[tab] || tab,
+                                            address,
+                                            row: r,
+                                            col: c,
+                                            text,
+                                            key: keyText(text)
+                                        });
+                                    }
+                                }
+                            } catch (err) {
+                                console.warn(`[검색 인덱스] ${tab} 로드 실패`, err);
+                            }
+                        }));
+
+                        /* 서버에서 읽힌 탭은 최신 XLSX 데이터로, 실패한 탭은 HTML 내장 인덱스로 유지 */
+                        const combined = [
+                            ...searchIndex.filter(item => !loadedTabs.has(item.tab)),
+                            ...all
+                        ];
+                        const unique = new Map();
+                        combined.forEach(item => unique.set(`${item.tab}|${item.address}|${item.key}`, item));
+                        searchIndex = [...unique.values()];
+                        loadFinished = true;
+                        if (input.value.trim()) renderResults();
+                    };
+
+                    const fallbackActiveDomResults = (query) => {
+                        const tab = getActiveTab();
+                        const q = keyText(query);
+                        const arr = [];
+                        floorplan?.querySelectorAll('td').forEach((td, i) => {
+                            const text = normalizeText(td.textContent);
+                            if (text && keyText(text).includes(q)) {
+                                arr.push({ tab, office: OFFICE_LABELS[tab] || tab, address: `DOM-${i}`, row: i, col: 0, text, key: keyText(text), domOnly: true });
+                            }
+                        });
+                        return arr.slice(0, 12);
+                    };
+
+                    const getMatches = (query) => {
+                        const q = keyText(query);
+                        if (!q) return { items: [], exact: false };
+                        const source = searchIndex.length ? searchIndex : fallbackActiveDomResults(query);
+                        const exact = source.filter(item => item.key === q);
+                        if (exact.length) {
+                            return {
+                                exact: true,
+                                items: exact.sort((a,b) => a.office.localeCompare(b.office, 'ko') || a.row - b.row || a.col - b.col).slice(0, 20)
+                            };
+                        }
+                        if (q.length < 2) return { items: [], exact: false };
+
+                        const partial = source.filter(item => item.key.includes(q));
+                        const dedup = new Map();
+                        partial
+                            .sort((a,b) => {
+                                const as = a.key.startsWith(q) ? 0 : 1;
+                                const bs = b.key.startsWith(q) ? 0 : 1;
+                                return as - bs || a.text.length - b.text.length || a.office.localeCompare(b.office, 'ko');
+                            })
+                            .forEach(item => {
+                                const k = `${item.tab}|${item.key}`;
+                                if (!dedup.has(k)) dedup.set(k, item);
+                            });
+                        return { exact: false, items: [...dedup.values()].slice(0, 12) };
+                    };
+
+                    const hidePopup = () => {
+                        popup.hidden = true;
+                        input.setAttribute('aria-expanded', 'false');
+                        highlightedIndex = -1;
+                    };
+
+                    const updateKeyboardSelection = () => {
+                        const buttons = [...resultsEl.querySelectorAll('.cw-search-result')];
+                        buttons.forEach((btn, i) => btn.setAttribute('aria-selected', i === highlightedIndex ? 'true' : 'false'));
+                        buttons[highlightedIndex]?.scrollIntoView({ block: 'nearest' });
+                    };
+
+                    const highlightEntry = (entry, attempt = 0) => {
+                        if (!floorplan) return;
+                        document.querySelectorAll('.active-match,.highlight-seat').forEach(el => el.classList.remove('active-match', 'highlight-seat'));
+
+                        const sameTextEntries = searchIndex
+                            .filter(x => x.tab === entry.tab && x.key === entry.key)
+                            .sort((a,b) => a.row - b.row || a.col - b.col);
+                        const occurrence = Math.max(0, sameTextEntries.findIndex(x => x.address === entry.address));
+
+                        const exactCells = [...floorplan.querySelectorAll('td')].filter(td => keyText(td.textContent) === entry.key);
+                        const target = exactCells[Math.min(occurrence, Math.max(0, exactCells.length - 1))];
+
+                        if (!target && attempt < 14) {
+                            setTimeout(() => highlightEntry(entry, attempt + 1), 160);
+                            return;
+                        }
+                        if (!target) return;
+
+                        target.classList.add('active-match');
+                        target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                        setTimeout(() => target.classList.remove('active-match'), 3200);
+                    };
+
+                    const jumpToEntry = (entry) => {
+                        hidePopup();
+                        const tabBtn = document.querySelector(`.tab-btn[data-tab="${entry.tab}"]`);
+                        const isCurrent = getActiveTab() === entry.tab;
+                        if (!isCurrent && tabBtn) tabBtn.click();
+                        setTimeout(() => highlightEntry(entry), isCurrent ? 60 : 380);
+                    };
+
+                    const renderResults = () => {
+                        if (isComposing) return;
+                        const query = normalizeText(input.value);
+                        if (clearBtn) clearBtn.classList.toggle('hidden', !query);
+                        if (!query) {
+                            hidePopup();
+                            return;
+                        }
+
+                        const { items, exact } = getMatches(query);
+                        resultsEl.innerHTML = '';
+                        highlightedIndex = -1;
+
+                        if (!items.length) {
+                            summary.textContent = loadFinished ? '검색 결과가 없습니다.' : '검색 데이터를 준비 중입니다…';
+                            popup.hidden = false;
+                            input.setAttribute('aria-expanded', 'true');
+                            return;
+                        }
+
+                        if (exact && items.length > 1) {
+                            summary.textContent = `동일한 이름/항목 ${items.length}건 — 오피스를 선택해주세요.`;
+                        } else if (exact) {
+                            summary.textContent = '정확히 일치하는 결과';
+                        } else {
+                            summary.textContent = `검색 결과 ${items.length}건`;
+                        }
+
+                        items.forEach(entry => {
+                            const button = document.createElement('button');
+                            button.type = 'button';
+                            button.className = 'cw-search-result';
+                            button.setAttribute('role', 'option');
+                            button.setAttribute('aria-selected', 'false');
+                            button.innerHTML = `<span class="cw-result-main"></span><span class="cw-result-meta"></span>`;
+                            button.querySelector('.cw-result-main').textContent = entry.text;
+                            button.querySelector('.cw-result-meta').textContent = entry.office;
+                            button.addEventListener('mousedown', e => e.preventDefault());
+                            button.addEventListener('click', () => jumpToEntry(entry));
+                            resultsEl.appendChild(button);
+                        });
+
+                        popup.hidden = false;
+                        input.setAttribute('aria-expanded', 'true');
+                    };
+
+                    input.addEventListener('compositionstart', () => { isComposing = true; });
+                    input.addEventListener('compositionend', () => {
+                        isComposing = false;
+                        setTimeout(renderResults, 0);
+                    });
+                    input.addEventListener('input', e => {
+                        if (e.isComposing || isComposing) return;
+                        /* 입력값/selectionStart를 절대 수정하지 않아 iOS/AOS 커서 이동 문제 방지 */
+                        requestAnimationFrame(renderResults);
+                    });
+                    input.addEventListener('focus', () => { if (input.value.trim()) renderResults(); });
+                    input.addEventListener('keydown', e => {
+                        if (e.key === 'Escape') {
+                            hidePopup();
+                            return;
+                        }
+                        const buttons = [...resultsEl.querySelectorAll('.cw-search-result')];
+                        if (!buttons.length) return;
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            highlightedIndex = Math.min(buttons.length - 1, highlightedIndex + 1);
+                            updateKeyboardSelection();
+                        } else if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            highlightedIndex = Math.max(0, highlightedIndex - 1);
+                            updateKeyboardSelection();
+                        } else if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (highlightedIndex >= 0) {
+                                buttons[highlightedIndex].click();
+                                return;
+                            }
+                            const matches = getMatches(input.value);
+                            if (matches.exact && matches.items.length === 1) jumpToEntry(matches.items[0]);
+                            else renderResults();
+                        }
+                    });
+
+                    clearBtn?.addEventListener('click', e => {
+                        e.preventDefault();
+                        input.value = '';
+                        input.focus();
+                        hidePopup();
+                        clearBtn.classList.add('hidden');
+                    });
+
+                    document.addEventListener('pointerdown', e => {
+                        if (!searchBox.contains(e.target)) hidePopup();
+                    });
+
+                    buildSearchIndex();
+                };
+
+                setupStableSearch();
+
+                /* -------------------- 엑셀 저장 파일명 안정화 -------------------- */
+                const setupExcelDownloadPatch = () => {
+                    if (!window.XLSX?.writeFile || window.XLSX._cwPatchedWriteFile) return;
+                    const originalWriteFile = window.XLSX.writeFile;
+                    window.XLSX.writeFile = function(workbook, filename, opts) {
+                        const currentTabId = getActiveTab();
+                        if (currentTabId) filename = `${currentTabId}.xlsx`;
+                        return originalWriteFile.call(this, workbook, filename, opts);
+                    };
+                    window.XLSX._cwPatchedWriteFile = true;
+                };
+
+                if (window.XLSX) setupExcelDownloadPatch();
+                else {
+                    const timer = setInterval(() => {
+                        if (window.XLSX) {
+                            setupExcelDownloadPatch();
+                            clearInterval(timer);
+                        }
+                    }, 200);
+                    setTimeout(() => clearInterval(timer), 10000);
                 }
             });
         })();
     </script>
+
+<script id="cw-sidebar-final-controller">
+(function(){
+  const q=s=>document.querySelector(s);
+  const clean=s=>(s||'').replace(/\s+/g,' ').trim();
+  const officeLabels={daerung:'대륭',woorim:'우림',dk18:'가산DK 18F',dk17:'가산DK 17F',gplus:'지플러스'};
+  const facilityRe=/(회의실|라운지|엘리베이터|화장실|휴게실|샤워실|세미나실|교육장|카페테리아|창고|출입문|메일룸|탕비실|치카룸|수면실|응접실|프로젝트룸|시스템실|OA|TEST\s*ROOM|복합기|정수기|원두머신|비상계단|분리수거)/i;
+  const roomCode=(tab,t)=>{
+    const x=clean(t).replace(/\s+/g,'').toUpperCase();
+    if(tab==='daerung') return /^[A-C]\d{3}[A-Z]?$/.test(x);
+    if(tab==='woorim') return /^(?:401|402|601|602|603|604|605|801)$/.test(x);
+    if(tab==='dk18'||tab==='dk17') return /^[AB]\d{3,4}$/.test(x) || x==='A1201';
+    return false;
+  };
+  const isDept=t=>{
+    const x=clean(t);
+    if(!x||x.length>40||facilityRe.test(x)) return false;
+    if(/(대표실|임원실|시스템실|메일룸|탕비실|치카룸|수면실|응접실)$/i.test(x)) return false;
+    return /(팀|본부|센터|파트|그룹|사업부|사업본부|TF|실)$/i.test(x);
+  };
+  function activeTab(){
+    return q('.tab-btn.bg-\\[\\#4F81BD\\]')?.dataset.tab || q('.tab-btn[aria-selected="true"]')?.dataset.tab || document.body.dataset.office || 'daerung';
+  }
+  function embedded(){
+    try{return JSON.parse(q('#cw-embedded-search-index')?.textContent||'[]')}catch(_){return []}
+  }
+  function build(tab){
+    const vals=new Set();
+    embedded().filter(x=>x&&x.tab===tab).forEach(x=>{const t=clean(x.text); if(t) vals.add(t)});
+    q('#dynamicFloorplan')?.querySelectorAll('td').forEach(td=>{const t=clean(td.textContent); if(t) vals.add(t)});
+    const depts=new Set(), facs=new Set();
+    const excludes=new Set(['0','1','A','B','C','D','E','F','G','부서 및 팀','회의실 및 시설']);
+    const perTab={daerung:new Set(['실외기','실외기실']),woorim:new Set(['실외기','실외기실']),dk18:new Set([]),dk17:new Set([]),gplus:new Set([])}[tab]||new Set();
+    vals.forEach(t=>{
+      if(!t||excludes.has(t)||perTab.has(t)) return;
+      if(/^[-+]?\d+(?:\.\d+)?$/.test(t) && !roomCode(tab,t)) return;
+      if(facilityRe.test(t)||roomCode(tab,t)||/^(?:부문대표실|총괄대표실|사업대표실|대표실|임원실|GA창고|공용창고|오픈형 창고)$/i.test(t)) facs.add(t);
+      else if(isDept(t)) depts.add(t);
+    });
+    const sorter=(a,b)=>a.localeCompare(b,'ko',{numeric:true,sensitivity:'base'});
+    return {depts:[...depts].sort(sorter),facs:[...facs].sort(sorter)};
+  }
+  function item(name){
+    const b=document.createElement('button');
+    b.type='button'; b.className='cw-dir-item'; b.textContent=name;
+    b.addEventListener('click',()=>{
+      const input=q('#searchInput');
+      if(input){input.value=name; input.dispatchEvent(new Event('input',{bubbles:true})); input.focus();}
+    });
+    return b;
+  }
+  function section(title,names,kind){
+    const s=document.createElement('section'); s.className='cw-dir-section'; s.dataset.kind=kind;
+    const h=document.createElement('div'); h.className='cw-dir-title';
+    const span=document.createElement('span'); span.textContent=title;
+    const count=document.createElement('span'); count.className='cw-dir-count'; count.textContent=String(names.length);
+    h.append(span,count);
+    const l=document.createElement('div'); l.className='cw-dir-list';
+    if(!names.length){const e=document.createElement('div');e.className='cw-dir-empty';e.textContent='표시할 항목이 없습니다.';l.appendChild(e)}
+    else names.forEach(n=>l.appendChild(item(n)));
+    s.append(h,l); return s;
+  }
+  function ensurePlacement(){
+    const shell=q('#workspaceShell'), panel=q('#dirPanel'), viewport=q('#viewport');
+    if(!shell||!panel||!viewport) return;
+    if(panel.parentElement!==shell || shell.firstElementChild!==panel) shell.insertBefore(panel,viewport);
+  }
+  function render(){
+    const c=q('#dirContent'); if(!c) return;
+    const {depts,facs}=build(activeTab());
+    c.replaceChildren(section('부서 및 팀',depts,'department'),section('회의실 및 시설',facs,'facility'));
+    c.scrollTop=0; q('#dirPanel').scrollTop=0;
+  }
+  function setOpen(open){
+    ensurePlacement();
+    const p=q('#dirPanel'), b=q('#toggleDirBtn'); if(!p||!b) return;
+    p.classList.toggle('hidden',!open);
+    p.style.display=open?'block':'none';
+    b.setAttribute('aria-expanded',open?'true':'false');
+    if(open){render(); p.scrollTop=0; q('#dirContent').scrollTop=0;}
+    window.dispatchEvent(new Event('resize'));
+  }
+  document.addEventListener('DOMContentLoaded',()=>{
+    ensurePlacement(); setOpen(false);
+    /* 기존 app.js / 보정 스크립트의 클릭 핸들러보다 먼저 처리 */
+    document.addEventListener('click',e=>{
+      const btn=e.target.closest&&e.target.closest('#toggleDirBtn');
+      if(!btn) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      const open=btn.getAttribute('aria-expanded')!=='true';
+      setOpen(open);
+    },true);
+    document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>{
+      setTimeout(()=>{ensurePlacement(); if(q('#toggleDirBtn')?.getAttribute('aria-expanded')==='true') render();},180);
+    }));
+    const shell=q('#workspaceShell');
+    if(shell) new MutationObserver(()=>ensurePlacement()).observe(shell,{childList:true});
+  });
+})();
+</script>
+
+<script id="cw-directory-click-highlight-fix">
+(function(){
+  const normalize=value=>String(value||'').replace(/\u00a0/g,' ').replace(/\s+/g,'').trim().toLowerCase();
+  const getCellText=td=>{if(!td)return'';const label=td.querySelector(':scope > .cw-cell-label');return label?label.textContent:(td.dataset.cwLoungeLabel||td.textContent||'');};
+  let clearTimer=null;
+  function clearDirectoryHighlights(){document.querySelectorAll('#dynamicFloorplan td.cw-directory-highlight').forEach(td=>td.classList.remove('cw-directory-highlight'));}
+  function highlightDirectoryTarget(name,attempt=0){
+    const floorplan=document.getElementById('dynamicFloorplan'); if(!floorplan)return;
+    const key=normalize(name); if(!key)return;
+    clearDirectoryHighlights();
+    const cells=[...floorplan.querySelectorAll('td')].filter(td=>normalize(getCellText(td))===key);
+    if(!cells.length&&attempt<8){setTimeout(()=>highlightDirectoryTarget(name,attempt+1),120);return;}
+    if(!cells.length)return;
+    cells.forEach(td=>td.classList.add('cw-directory-highlight'));
+    const first=cells[0]; requestAnimationFrame(()=>first.scrollIntoView({behavior:'smooth',block:'center',inline:'center'}));
+    if(clearTimer)clearTimeout(clearTimer); clearTimer=setTimeout(clearDirectoryHighlights,3800);
+  }
+  document.addEventListener('click',function(e){
+    const item=e.target&&e.target.closest?e.target.closest('.cw-dir-item'):null; if(!item)return;
+    const panel=document.getElementById('dirPanel'); if(!panel||!panel.contains(item))return;
+    const name=(item.dataset.directoryName||item.textContent||'').trim(); if(!name)return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const input=document.getElementById('searchInput');
+    if(input){input.value=name; const clearBtn=document.getElementById('clearSearchBtn'); if(clearBtn)clearBtn.classList.remove('hidden'); input.setAttribute('aria-expanded','false');}
+    const popup=document.getElementById('searchPopup'); if(popup)popup.hidden=true;
+    highlightDirectoryTarget(name);
+  },true);
+  document.addEventListener('input',function(e){if(e.target&&e.target.id==='searchInput')clearDirectoryHighlights();},true);
+})();
+</script>
+
+
+    <script id="cw-secure-download-gate">
+    (() => {
+        const DENY_MESSAGE = '유출금지 및 파일 다운 관련은 담당자에게 문의해주세요.';
+
+        const isAdminModeActive = () => {
+            const controls = document.getElementById('adminControls');
+            if (!controls) return false;
+            const style = window.getComputedStyle(controls);
+            return !controls.classList.contains('hidden') &&
+                   style.display !== 'none' &&
+                   style.visibility !== 'hidden';
+        };
+
+        const bindDownloadGate = () => {
+            const button = document.getElementById('downloadExcelBtn');
+            if (!button || button.dataset.secureDownloadGateBound === 'true') return;
+            button.dataset.secureDownloadGateBound = 'true';
+
+            /* 저장 버튼은 일반 사용자에게도 계속 노출한다. */
+            button.classList.remove('hidden');
+            button.style.display = 'flex';
+
+            /* capture 단계에서 비관리자의 저장 이벤트를 먼저 차단한다. */
+            button.addEventListener('click', (event) => {
+                if (isAdminModeActive()) return;
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+                window.alert(DENY_MESSAGE);
+            }, true);
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bindDownloadGate, { once: true });
+        } else {
+            bindDownloadGate();
+        }
+
+        /* 외부 스크립트가 버튼을 다시 렌더링하는 경우에도 보안 게이트를 복구 */
+        new MutationObserver(bindDownloadGate).observe(document.documentElement, { childList: true, subtree: true });
+    })();
+    </script>
+
+
+
+<script id="cw-gplus-door-opening-fix-script-v2">
+(() => {
+    const floorplan = document.getElementById('dynamicFloorplan');
+    if (!floorplan) return;
+
+    const normalize = (value) =>
+        String(value ?? '')
+            .replace(/\u00a0/g, ' ')
+            .replace(/\s+/g, '')
+            .trim();
+
+    const getCellText = (td) => {
+        const label = td.querySelector(':scope > .cw-cell-label');
+        return normalize(label?.textContent || td.dataset.cwLoungeLabel || td.textContent || '');
+    };
+
+    /*
+     * Do not rely on body[data-office].
+     * app.js changes the active tab button but body.data-office can remain "daerung".
+     */
+    const getActiveTab = () => {
+        const buttons = [...document.querySelectorAll('.tab-btn[data-tab]')];
+
+        const selected = buttons.find(btn => btn.getAttribute('aria-selected') === 'true');
+        if (selected) return selected.dataset.tab || '';
+
+        const blue = buttons.find(btn =>
+            btn.classList.contains('bg-[#4F81BD]') ||
+            btn.classList.contains('text-white')
+        );
+        if (blue) return blue.dataset.tab || '';
+
+        return document.body?.dataset?.office || '';
+    };
+
+    const clearDoorClasses = () => {
+        floorplan.querySelectorAll('.cw-gplus-door-horizontal, .cw-gplus-door-vertical')
+            .forEach(td => {
+                td.classList.remove('cw-gplus-door-horizontal', 'cw-gplus-door-vertical');
+            });
+    };
+
+    const applyDoorOpenings = () => {
+        clearDoorClasses();
+        if (getActiveTab() !== 'gplus') return;
+
+        floorplan.querySelectorAll('td').forEach(td => {
+            if (getCellText(td) !== '출입문') return;
+
+            /*
+             * The source workbook contains two kinds of entrance merged cells:
+             * - horizontal: colspan > rowspan  -> break top/bottom wall
+             * - vertical:   rowspan > colspan -> break left/right wall
+             *
+             * This mirrors how the GPlus Excel file expresses an open doorway.
+             */
+            const colspan = Number(td.colSpan || 1);
+            const rowspan = Number(td.rowSpan || 1);
+
+            if (rowspan > colspan) {
+                td.classList.add('cw-gplus-door-vertical');
+            } else {
+                td.classList.add('cw-gplus-door-horizontal');
+            }
+        });
+    };
+
+    let timer = null;
+    const schedule = (delay = 30) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => requestAnimationFrame(applyDoorOpenings), delay);
+    };
+
+    new MutationObserver(() => schedule(40)).observe(floorplan, {
+        childList: true,
+        subtree: true
+    });
+
+    document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            schedule(50);
+            setTimeout(applyDoorOpenings, 160);
+            setTimeout(applyDoorOpenings, 360);
+        });
+    });
+
+    window.addEventListener('load', () => {
+        applyDoorOpenings();
+        setTimeout(applyDoorOpenings, 200);
+    });
+
+    applyDoorOpenings();
+})();
+</script>
+
 </body>
 </html>
