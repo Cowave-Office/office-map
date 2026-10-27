@@ -412,8 +412,17 @@
 
 <style id="cw-security-notice-style">
   #securityNotice .fa-lock{color:#b45309!important;}
+  #securityNotice .cw-security-critical{
+    color:#dc2626!important;
+    font-weight:900!important;
+    letter-spacing:-0.01em;
+  }
   @media(max-width:640px){
     #securityNotice{align-items:flex-start;line-height:1.45;}
+    #securityNotice .cw-security-critical{
+      color:#b91c1c!important;
+      font-weight:900!important;
+    }
   }
 </style>
 
@@ -593,7 +602,7 @@
 
         <div id="securityNotice" role="note" aria-label="보안 안내" class="mx-4 md:mx-6 mb-2.5 px-3.5 py-2.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 flex items-center gap-2.5 text-xs md:text-sm font-semibold shadow-sm">
             <i class="fa-solid fa-lock shrink-0" aria-hidden="true"></i>
-            <span><strong>사내 보안자료입니다.</strong> 화면 캡처·촬영·외부 공유를 금지하며, 파일 저장이 필요한 경우 담당자에게 요청해 주세요.</span>
+            <span><strong>사내 보안자료입니다.</strong> <strong class="cw-security-critical">화면 캡처·촬영·외부 공유를 금지</strong>하며, 파일 저장이 필요한 경우 담당자에게 요청해 주세요.</span>
         </div>
 
     </div>
