@@ -409,6 +409,14 @@
   }
 </style>
 
+
+<style id="cw-security-notice-style">
+  #securityNotice .fa-lock{color:#b45309!important;}
+  @media(max-width:640px){
+    #securityNotice{align-items:flex-start;line-height:1.45;}
+  }
+</style>
+
 </head>
 <body data-office="daerung" data-design="original" class="bg-stone-100 text-stone-800 h-screen flex flex-col overflow-hidden font-sans antialiased">
 
@@ -512,9 +520,14 @@
                 <button id="fontIncreaseBtn" title="글씨 확대" class="p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-800 rounded transition flex items-center justify-center gap-0.5"><i class="fa-solid fa-font text-[14px] !text-stone-500"></i><i class="fa-solid fa-plus text-[8px] !text-stone-500"></i></button>
             </div>
 
-            <button id="downloadExcelBtn" title="엑셀 저장" aria-label="엑셀 저장" class="h-[38px] ml-auto px-4 bg-[#4F81BD] hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition shadow-sm flex items-center gap-2 whitespace-nowrap">
+            <button id="downloadExcelBtn" title="엑셀 저장" aria-label="엑셀 저장" aria-hidden="true" class="hidden h-[38px] ml-auto px-4 bg-[#4F81BD] hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition shadow-sm items-center gap-2 whitespace-nowrap" style="display:none;">
                 <i class="fa-solid fa-file-excel !text-white"></i> 저장
             </button>
+        </div>
+
+        <div id="securityNotice" role="note" aria-label="보안 안내" class="mx-4 md:mx-6 mb-2.5 px-3.5 py-2.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 flex items-center gap-2.5 text-xs md:text-sm font-semibold shadow-sm">
+            <i class="fa-solid fa-lock shrink-0" aria-hidden="true"></i>
+            <span><strong>사내 보안자료입니다.</strong> 화면 캡처·촬영·외부 공유를 금지하며, 파일 저장이 필요한 경우 담당자에게 요청해 주세요.</span>
         </div>
 
     </div>
@@ -623,7 +636,9 @@
                     .replace(/\s+/g, ' ')
                     .trim();
 
-                const keyText = (value) => normalizeText(value).toLocaleLowerCase('ko-KR');
+                const keyText = (value) => normalizeText(value)
+                    .replace(/\s+/g, '')
+                    .toLocaleLowerCase('ko-KR');
 
                 const getActiveTab = () => {
                     const active = document.querySelector('.tab-btn.bg-\\[\\#4F81BD\\]') ||
@@ -1189,7 +1204,12 @@
                     try {
                         const embeddedEl = document.getElementById('cw-embedded-search-index');
                         const embedded = embeddedEl ? JSON.parse(embeddedEl.textContent || '[]') : [];
-                        if (Array.isArray(embedded)) searchIndex = embedded;
+                        if (Array.isArray(embedded)) {
+                            searchIndex = embedded.map(item => ({
+                                ...item,
+                                key: keyText(item?.text ?? item?.key ?? '')
+                            }));
+                        }
                     } catch (err) {
                         console.warn('[통합검색] 내장 검색 인덱스 로드 실패', err);
                     }
@@ -1286,30 +1306,29 @@
 
                     const getMatches = (query) => {
                         const q = keyText(query);
-                        if (!q) return { items: [], exact: false };
+                        if (!q) return { items: [], exact: false, exactCount: 0 };
                         const source = searchIndex.length ? searchIndex : fallbackActiveDomResults(query);
-                        const exact = source.filter(item => item.key === q);
-                        if (exact.length) {
-                            return {
-                                exact: true,
-                                items: exact.sort((a,b) => a.office.localeCompare(b.office, 'ko') || a.row - b.row || a.col - b.col).slice(0, 20)
-                            };
-                        }
-                        if (q.length < 2) return { items: [], exact: false };
+                        if (q.length < 2) return { items: [], exact: false, exactCount: 0 };
 
-                        const partial = source.filter(item => item.key.includes(q));
+                        /* 정확히 일치하는 이름이 있어도 같은 문자열로 시작하는 다른 이름을 함께 표시한다.
+                           예: '이건' 검색 시 '이건' + '이건석' 모두 노출, 정확일치는 최상단 배치. */
+                        const matches = source.filter(item => item.key.includes(q));
+                        const exactCount = matches.filter(item => item.key === q).length;
                         const dedup = new Map();
-                        partial
+                        matches
                             .sort((a,b) => {
+                                const ae = a.key === q ? 0 : 1;
+                                const be = b.key === q ? 0 : 1;
+                                if (ae !== be) return ae - be;
                                 const as = a.key.startsWith(q) ? 0 : 1;
                                 const bs = b.key.startsWith(q) ? 0 : 1;
-                                return as - bs || a.text.length - b.text.length || a.office.localeCompare(b.office, 'ko');
+                                return as - bs || a.text.length - b.text.length || a.office.localeCompare(b.office, 'ko') || a.row - b.row || a.col - b.col;
                             })
                             .forEach(item => {
                                 const k = `${item.tab}|${item.key}`;
                                 if (!dedup.has(k)) dedup.set(k, item);
                             });
-                        return { exact: false, items: [...dedup.values()].slice(0, 12) };
+                        return { exact: exactCount > 0, exactCount, items: [...dedup.values()].slice(0, 20) };
                     };
 
                     const hidePopup = () => {
@@ -1364,7 +1383,7 @@
                             return;
                         }
 
-                        const { items, exact } = getMatches(query);
+                        const { items, exact, exactCount = 0 } = getMatches(query);
                         resultsEl.innerHTML = '';
                         highlightedIndex = -1;
 
@@ -1375,9 +1394,9 @@
                             return;
                         }
 
-                        if (exact && items.length > 1) {
-                            summary.textContent = `동일한 이름/항목 ${items.length}건 — 오피스를 선택해주세요.`;
-                        } else if (exact) {
+                        if (exactCount > 1) {
+                            summary.textContent = `정확히 일치 ${exactCount}건 · 전체 검색 결과 ${items.length}건`;
+                        } else if (exactCount === 1 && items.length === 1) {
                             summary.textContent = '정확히 일치하는 결과';
                         } else {
                             summary.textContent = `검색 결과 ${items.length}건`;
@@ -1401,15 +1420,46 @@
                         input.setAttribute('aria-expanded', 'true');
                     };
 
-                    input.addEventListener('compositionstart', () => { isComposing = true; });
+                    /* iOS Safari 한글 IME는 입력 중 DOM을 즉시 갱신하면 삭제 시 caret이 튀는 경우가 있어
+                       조합 중에는 결과 DOM을 건드리지 않고, 조합 종료/입력 후 짧게 지연해 갱신한다. */
+                    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+                    let searchRenderTimer = null;
+                    let searchRaf = 0;
+                    const queueSearchRender = (delay = 0) => {
+                        if (searchRenderTimer) clearTimeout(searchRenderTimer);
+                        if (searchRaf) cancelAnimationFrame(searchRaf);
+                        if (isIOS) {
+                            searchRenderTimer = setTimeout(() => {
+                                searchRenderTimer = null;
+                                if (!isComposing) renderResults();
+                            }, Math.max(90, delay));
+                        } else if (delay > 0) {
+                            searchRenderTimer = setTimeout(() => {
+                                searchRenderTimer = null;
+                                if (!isComposing) renderResults();
+                            }, delay);
+                        } else {
+                            searchRaf = requestAnimationFrame(() => {
+                                searchRaf = 0;
+                                if (!isComposing) renderResults();
+                            });
+                        }
+                    };
+
+                    input.addEventListener('compositionstart', () => {
+                        isComposing = true;
+                        if (searchRenderTimer) clearTimeout(searchRenderTimer);
+                        if (searchRaf) cancelAnimationFrame(searchRaf);
+                    });
                     input.addEventListener('compositionend', () => {
                         isComposing = false;
-                        setTimeout(renderResults, 0);
+                        queueSearchRender(isIOS ? 120 : 0);
                     });
                     input.addEventListener('input', e => {
                         if (e.isComposing || isComposing) return;
-                        /* 입력값/selectionStart를 절대 수정하지 않아 iOS/AOS 커서 이동 문제 방지 */
-                        requestAnimationFrame(renderResults);
+                        /* input.value / selectionStart / focus를 변경하지 않는다. */
+                        queueSearchRender(isIOS ? 120 : 0);
                     });
                     input.addEventListener('focus', () => { if (input.value.trim()) renderResults(); });
                     input.addEventListener('keydown', e => {
@@ -1613,11 +1663,8 @@
 })();
 </script>
 
-
     <script id="cw-secure-download-gate">
     (() => {
-        const DENY_MESSAGE = '유출금지 및 파일 다운 관련은 담당자에게 문의해주세요.';
-
         const isAdminModeActive = () => {
             const controls = document.getElementById('adminControls');
             if (!controls) return false;
@@ -1627,33 +1674,60 @@
                    style.visibility !== 'hidden';
         };
 
-        const bindDownloadGate = () => {
+        const syncDownloadButton = () => {
             const button = document.getElementById('downloadExcelBtn');
-            if (!button || button.dataset.secureDownloadGateBound === 'true') return;
-            button.dataset.secureDownloadGateBound = 'true';
+            if (!button) return;
+            const allowed = isAdminModeActive();
+            button.classList.toggle('hidden', !allowed);
+            button.style.display = allowed ? 'flex' : 'none';
+            button.setAttribute('aria-hidden', allowed ? 'false' : 'true');
+            button.tabIndex = allowed ? 0 : -1;
+        };
 
-            /* 저장 버튼은 일반 사용자에게도 계속 노출한다. */
-            button.classList.remove('hidden');
-            button.style.display = 'flex';
-
-            /* capture 단계에서 비관리자의 저장 이벤트를 먼저 차단한다. */
+        const bindDownloadGuard = () => {
+            const button = document.getElementById('downloadExcelBtn');
+            if (!button || button.dataset.adminOnlyDownloadBound === 'true') return;
+            button.dataset.adminOnlyDownloadBound = 'true';
+            /* 숨김 상태에서 스크립트 등으로 클릭이 발생해도 다운로드를 차단한다. */
             button.addEventListener('click', (event) => {
                 if (isAdminModeActive()) return;
                 event.preventDefault();
                 event.stopPropagation();
                 event.stopImmediatePropagation();
-                window.alert(DENY_MESSAGE);
             }, true);
         };
 
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', bindDownloadGate, { once: true });
-        } else {
-            bindDownloadGate();
-        }
+        const init = () => {
+            bindDownloadGuard();
+            syncDownloadButton();
 
-        /* 외부 스크립트가 버튼을 다시 렌더링하는 경우에도 보안 게이트를 복구 */
-        new MutationObserver(bindDownloadGate).observe(document.documentElement, { childList: true, subtree: true });
+            const controls = document.getElementById('adminControls');
+            if (controls) {
+                new MutationObserver(syncDownloadButton).observe(controls, {
+                    attributes: true,
+                    attributeFilter: ['class', 'style', 'hidden']
+                });
+            }
+
+            const adminBtn = document.getElementById('adminLoginBtn');
+            adminBtn?.addEventListener('click', () => {
+                setTimeout(syncDownloadButton, 0);
+                setTimeout(syncDownloadButton, 120);
+                setTimeout(syncDownloadButton, 400);
+            });
+
+            /* 외부 app.js가 관리자 UI를 갱신하는 경우에도 상태를 동기화 */
+            new MutationObserver(() => {
+                bindDownloadGuard();
+                syncDownloadButton();
+            }).observe(document.body, { childList: true, subtree: true });
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init, { once: true });
+        } else {
+            init();
+        }
     })();
     </script>
 
